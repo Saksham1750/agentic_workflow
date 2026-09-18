@@ -1,0 +1,316 @@
+patterns:
+  - name: "ReAct (Reasoning + Acting)"
+    intent: "Interleave reasoning traces with action calls so the model can observe intermediate results before deciding the next step."
+    structure: >
+      A loop of: (1) Thought — the model reasons about what it knows and what
+      it needs; (2) Action — it calls an external tool; (3) Observation — the
+      tool result is fed back. The loop repeats until the model produces a
+      final answer. Implemented as a single node that alternates between LLM
+      call and tool execution within a conditional cycle.
+    when_to_use: >
+      Use when the task requires multi-step reasoning with access to external
+      tools (search, calculators, APIs). Ideal for question-answering,
+      fact-checking, and research tasks where intermediate results guide the
+      next step.
+    strengths: >
+      Transparent reasoning chain; easy to debug; naturally handles
+      multi-step problems; works well with tool-augmented LLMs.
+    weaknesses: >
+      Can loop indefinitely without a max-iteration guard; latency scales
+      linearly with the number of steps; each step is a full LLM call.
+    example_use_case: >
+      A research agent that searches the web, reads pages, and synthesizes
+      an answer — reasoning about what it has found before searching again.
+    tags:
+      - reasoning
+      - tool-use
+      - agentic
+      - loop
+
+  - name: "Reflection"
+    intent: "Have the model critique and improve its own output through self-evaluation cycles."
+    structure: >
+      Two-node cycle: (1) Generator — produces or refines output; (2)
+      Critic/Evaluator — reviews the output against criteria, producing
+      structured feedback. The generator revises based on feedback. The
+      cycle repeats until the critic passes or a max iteration is reached.
+    when_to_use: >
+      Use when output quality benefits from iterative refinement: code
+      generation, writing, analysis, or any task where a first draft can be
+      improved by structured self-critique.
+    strengths: >
+      Produces higher quality outputs; catches errors early; surfaces
+      assumptions; easy to add domain-specific evaluation criteria.
+    weaknesses: >
+      Adds latency (2× or more LLM calls per iteration); risk of
+      over-optimization or stylistic drift; critic may be unreliable for
+      subjective quality judgments.
+    example_use_case: >
+      Code generation where the developer agent writes code, a critic
+      reviews it for bugs and style issues, and the developer revises
+      until the critic approves.
+    tags:
+      - self-critique
+      - iterative
+      - quality
+      - evaluator-optimizer
+
+  - name: "Planner-Executor"
+    intent: "Separate planning from execution — a planner decomposes the task into steps, then an executor carries them out."
+    structure: >
+      (1) Planner node — an LLM generates a structured plan (ordered steps
+      with inputs/outputs); (2) Executor nodes — each step is executed
+      sequentially or in parallel; (3) Re-planner — if execution fails or
+      conditions change, the plan is revised. Plans are stored in state.
+    when_to_use: >
+      Use for complex, multi-step tasks that benefit from upfront planning:
+      project decompositions, workflow orchestration, multi-file code changes.
+    strengths: >
+      Separation of concerns; plans are inspectable and editable; easy to
+      parallelize independent steps; supports HITL at the planning stage.
+    weaknesses: >
+      Plans may become stale if the environment changes; planner overhead
+      for simple tasks; executor failures may require full re-planning.
+    example_use_case: >
+      Breaking a feature request into a sequence of code changes across
+      multiple files, then executing each change with a specialist agent.
+    tags:
+      - planning
+      - decomposition
+      - orchestration
+      - sequential
+
+  - name: "Multi-Agent Debate"
+    intent: "Multiple agents with different perspectives or specializations debate to reach a better conclusion."
+    structure: >
+      N agents (typically 2-3) each produce an independent response to the
+      same prompt. A moderator or another agent synthesizes the responses,
+      resolving disagreements and combining strengths. May iterate for
+      multiple rounds.
+    when_to_use: >
+      Use for decisions that benefit from diverse perspectives: architecture
+      reviews, risk assessment, ethical considerations, or any task where
+      group reasoning outperforms individual reasoning.
+    strengths: >
+      Reduces individual bias; surfaces blind spots; produces more robust
+      conclusions; naturally parallelizable.
+    weaknesses: >
+      Expensive (N× LLM calls per round); may converge on mediocre middle
+      ground; requires a good synthesizer to resolve disagreements.
+    example_use_case: >
+      Three architecture agents debate different design approaches for a
+      microservice, then a synthesizer produces the final architecture.
+    tags:
+      - multi-agent
+      - debate
+      - collaborative
+      - parallel
+
+  - name: "Router (Dispatcher)"
+    intent: "Classify the input and route it to the most appropriate handler or specialist."
+    structure: >
+      A classifier/router node analyzes the input and selects one of N
+      downstream paths. Each path leads to a specialist agent, tool, or
+      sub-workflow optimized for that category. May include a fallback path.
+    when_to_use: >
+      Use when inputs vary widely in type or complexity: support ticket
+      triage, document classification, or any system with multiple specialist
+      agents.
+    strengths: >
+      Optimizes resource usage by directing to the right handler; reduces
+      latency for simple inputs; easy to add new specialists.
+    weaknesses: >
+      Misrouting degrades quality; router itself needs training/examples;
+      hard to handle ambiguous or multi-category inputs.
+    example_use_case: >
+      A support system routes technical issues to a debugging agent,
+      billing questions to a billing agent, and feature requests to a
+      product agent.
+    tags:
+      - routing
+      - classification
+      - dispatch
+      - orchestration
+
+  - name: "RAG (Retrieval-Augmented Generation)"
+    intent: "Ground LLM responses in retrieved documents to reduce hallucination and provide citations."
+    structure: >
+      (1) Retriever — queries a vector store or search engine for relevant
+      documents; (2) Prompt builder — assembles retrieved context into the
+      prompt; (3) Generator — LLM produces a response grounded in the
+      provided context. May include a re-ranker or verification step.
+    when_to_use: >
+      Use whenever the model needs access to specific, up-to-date, or
+      proprietary information not in its training data: knowledge bases,
+      documentation search, FAQ systems, legal/compliance queries.
+    strengths: >
+      Reduces hallucination; provides verifiable citations; updates easily
+      without retraining; domain-specific without fine-tuning.
+    weaknesses: >
+      Quality depends on retrieval quality; adds latency for vector queries;
+      context window limits may truncate relevant info; embedding model
+      quality matters.
+    example_use_case: >
+      A coding assistant that retrieves relevant API documentation, past
+      code reviews, and internal coding standards before generating code.
+    tags:
+      - retrieval
+      - grounding
+      - knowledge-base
+      - rag
+
+  - name: "Tool-Use Agent"
+    intent: "Give the LLM access to external tools (APIs, code executors, databases) and let it decide which to call."
+    structure: >
+      An LLM is equipped with tool definitions (function schemas). On each
+      step it decides whether to call a tool or produce a final answer. Tool
+      results are fed back. Often implemented with a ToolNode or function
+      calling API. May combine with ReAct for reasoning.
+    when_to_use: >
+      Use when the task requires interaction with external systems:
+      database queries, API calls, code execution, file operations,
+      calculations, or any deterministic operation the LLM cannot do alone.
+    strengths: >
+      Extends LLM capabilities beyond text; deterministic results for
+      calculable operations; auditable tool calls; composable.
+    weaknesses: >
+      Tool definitions add prompt tokens; LLM may hallucinate tool parameters;
+      error handling needed for failed tool calls; security considerations
+      for privileged operations.
+    example_use_case: >
+      An agent that can query a database, execute Python code, and call
+      external APIs to answer complex analytical questions.
+    tags:
+      - tool-use
+      - function-calling
+      - agentic
+      - external
+
+  - name: "Hierarchical (Supervisor-Worker)"
+    intent: "A supervisor agent coordinates multiple specialist worker agents in a tree structure."
+    structure: >
+      (1) Supervisor — receives the top-level task, decomposes it, and
+      assigns sub-tasks to workers; (2) Worker agents — each handles a
+      specialized sub-task and reports results back; (3) Supervisor
+      aggregates results. Workers may have their own sub-workers.
+    when_to_use: >
+      Use for complex projects that need multiple specializations: full-stack
+      development (frontend + backend + DB), content creation (research +
+      writing + editing), or any parallelizable multi-domain task.
+    strengths: >
+      Natural parallelism; clear responsibility boundaries; scales by adding
+      workers; supports complex multi-domain tasks.
+    weaknesses: >
+      Supervisor becomes a bottleneck; communication overhead increases with
+      worker count; hard to handle cross-worker dependencies.
+    example_use_case: >
+      A full-stack development project where the supervisor assigns tasks
+      to a frontend specialist, backend specialist, and database specialist.
+    tags:
+      - hierarchical
+      - supervisor
+      - multi-agent
+      - parallel
+
+  - name: "Critic-Refine"
+    intent: "A critic evaluates output against specific criteria, and a refiner iterates until quality thresholds are met."
+    structure: >
+      Similar to Reflection but more explicit: (1) Producer generates
+      output; (2) Critic evaluates against a rubric (correctness, style,
+      performance, security); (3) Refiner incorporates feedback. Loop with
+      configurable max iterations and quality threshold.
+    when_to_use: >
+      Use for quality-sensitive outputs: production code, documentation,
+      compliance documents, or any artifact that must meet specific
+      measurable criteria.
+    strengths: >
+      Measurable quality improvement; criteria-driven (not subjective);
+      converges to a passing/failing verdict; easy to add domain-specific
+      checks.
+    weaknesses: >
+      May not converge if criteria are contradictory; expensive; critic
+      accuracy limits final quality.
+    example_use_case: >
+      Security review cycle where a security reviewer checks code for
+      vulnerabilities, and the developer fixes issues until all checks pass.
+    tags:
+      - critique
+      - quality
+      - iterative
+      - evaluator-optimizer
+
+  - name: "Map-Reduce"
+    intent: "Process many items independently (map), then aggregate results (reduce) for a final answer."
+    structure: >
+      (1) Map phase — fan out processing across N items in parallel using
+      the same agent/prompt; (2) Reduce phase — a single agent aggregates
+      all intermediate results into a final output. The map phase can use
+      Send() for dynamic parallelism.
+    when_to_use: >
+      Use for batch operations on collections: summarizing multiple documents,
+      reviewing multiple code files, analyzing multiple data sources, or any
+      task where the same operation applies to many items.
+    strengths: >
+      Natural parallelism; handles large input sets; deterministic
+      aggregation; easy to reason about.
+    weaknesses: >
+      Map phase dominates cost for large N; reduce phase may lose nuance;
+      no cross-item reasoning during map phase.
+    example_use_case: >
+      Summarizing 100 support tickets by mapping each through a
+      summarization agent, then reducing into a single trend report.
+    tags:
+      - parallel
+      - batch
+      - aggregation
+      - fan-out
+
+  - name: "State Machine (Conditional Graph)"
+    intent: "Model the workflow as a finite state machine with explicit states and transitions."
+    structure: >
+      Nodes represent states; edges represent transitions. A routing function
+      determines the next state based on current state. Supports cycles,
+      guards, and terminal states. Each state can have its own sub-graph.
+    when_to_use: >
+      Use for workflows with well-defined states and explicit transitions:
+      approval workflows, order processing, CI/CD pipelines, or any
+      process with clear stages and decision points.
+    strengths: >
+      Explicit and auditable; easy to visualize; supports HITL at any state;
+      deterministic transitions; well-understood pattern.
+    weaknesses: >
+      Rigid for highly dynamic workflows; state explosion for complex
+      branching; hard to add new states without modifying the graph.
+    example_use_case: >
+      An approval pipeline: draft → review → revise → approve → deploy,
+      with explicit transitions and human gates at review and approve.
+    tags:
+      - state-machine
+      - workflow
+      - deterministic
+      - conditional
+
+  - name: "Prompt Chaining"
+    intent: "Sequence multiple LLM calls where each step's output feeds into the next step's input."
+    structure: >
+      A linear sequence of nodes: Step1 → Step2 → ... → StepN. Each node
+      is an LLM call with a specific prompt. State carries the accumulated
+      results. May include conditional branches for error handling.
+    when_to_use: >
+      Use for multi-stage processing where each step adds value: research →
+      outline → draft → edit → format, or any sequential pipeline of LLM
+      operations.
+    strengths: >
+      Simple to implement and debug; each step is independently testable;
+      easy to swap out individual steps; clear data flow.
+    weaknesses: >
+      Rigid pipeline; no backtracking; errors compound; limited to
+      sequential workflows.
+    example_use_case: >
+      A content pipeline: (1) research the topic, (2) create an outline,
+      (3) write the draft, (4) edit for style, (5) format for publication.
+    tags:
+      - sequential
+      - pipeline
+      - simple
+      - chaining

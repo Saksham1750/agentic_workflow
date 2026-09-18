@@ -1,0 +1,1152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Agent Factory v2</title>
+<style>
+  :root { --bg: #0f1117; --card: #1a1d27; --border: #2a2d3a; --text: #e1e4ed; --muted: #8b8fa3; --accent: #6c5ce7; --accent2: #00b894; --danger: #e74c3c; --warn: #f39c12; --success: #00b894; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+  .header { background: var(--card); border-bottom: 1px solid var(--border); padding: 16px 32px; display: flex; align-items: center; gap: 16px; }
+  .header h1 { font-size: 20px; font-weight: 600; }
+  .header .badge { background: var(--accent); color: white; padding: 2px 10px; border-radius: 12px; font-size: 12px; }
+  .header .badge.wf2 { background: #e17055; }
+  .container { max-width: 1200px; margin: 24px auto; padding: 0 24px; }
+  .step { background: var(--card); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 16px; overflow: hidden; }
+  .step-header { padding: 14px 20px; display: flex; align-items: center; gap: 12px; cursor: pointer; user-select: none; }
+  .step-header:hover { background: rgba(108,92,231,0.05); }
+  .step-num { background: var(--accent); color: white; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; flex-shrink: 0; }
+  .step-num.done { background: var(--success); }
+  .step-num.active { background: var(--warn); animation: pulse 1.5s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+  .step-title { font-weight: 600; font-size: 15px; flex: 1; }
+  .step-status { font-size: 12px; padding: 3px 10px; border-radius: 10px; }
+  .step-status.pending { background: rgba(139,143,163,0.15); color: var(--muted); }
+  .step-status.active { background: rgba(243,156,18,0.15); color: var(--warn); }
+  .step-status.done { background: rgba(0,184,148,0.15); color: var(--success); }
+  .step-status.error { background: rgba(231,76,60,0.15); color: var(--danger); }
+  .step-body { padding: 0 20px 20px; display: none; }
+  .step-body.open { display: block; }
+  label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; margin-top: 12px; }
+  input[type="text"], input[type="password"], textarea, select {
+    width: 100%; padding: 10px 12px; background: var(--bg); border: 1px solid var(--border);
+    border-radius: 8px; color: var(--text); font-size: 14px; font-family: inherit;
+  }
+  textarea { min-height: 100px; resize: vertical; }
+  input:focus, textarea:focus, select:focus { outline: none; border-color: var(--accent); }
+  .btn { padding: 10px 20px; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600; transition: all 0.15s; }
+  .btn-primary { background: var(--accent); color: white; }
+  .btn-primary:hover { background: #5b4bd5; }
+  .btn-success { background: var(--success); color: white; }
+  .btn-success:hover { background: #00a381; }
+  .btn-danger { background: var(--danger); color: white; }
+  .btn-danger:hover { background: #c0392b; }
+  .btn-warn { background: var(--warn); color: white; }
+  .btn-warn:hover { background: #e08e0b; }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-row { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
+  .output { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; margin-top: 12px; font-family: 'Cascadia Code', 'Fira Code', monospace; font-size: 13px; white-space: pre-wrap; max-height: 500px; overflow-y: auto; }
+  .output:empty { display: none; }
+  .output.error { border-color: var(--danger); color: var(--danger); }
+  .output.success { border-color: var(--success); }
+  .tag { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 600; }
+  .tag-ready { background: rgba(0,184,148,0.15); color: var(--success); }
+  .tag-uploaded { background: rgba(243,156,18,0.15); color: var(--warn); }
+  .tag-failed { background: rgba(231,76,60,0.15); color: var(--danger); }
+  .question-card { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 14px; margin-top: 10px; }
+  .question-card .q-title { font-weight: 600; font-size: 14px; margin-bottom: 4px; }
+  .question-card .q-context { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+  .question-card textarea { min-height: 50px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .inline-group { display: flex; gap: 8px; align-items: flex-end; }
+  .inline-group > div { flex: 1; }
+  .inline-group .btn { flex-shrink: 0; height: 42px; }
+  hr.divider { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
+  .hidden { display: none !important; }
+  .log-line { padding: 2px 0; font-size: 13px; }
+  .log-line .ts { color: var(--muted); margin-right: 8px; }
+  .log-line.info { color: var(--text); }
+  .log-line.ok { color: var(--success); }
+  .log-line.err { color: var(--danger); }
+  .artifact-card { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 14px; margin-top: 10px; }
+  .artifact-card h4 { font-size: 14px; margin-bottom: 8px; color: var(--accent); }
+  .artifact-card pre { font-size: 12px; white-space: pre-wrap; max-height: 300px; overflow-y: auto; }
+  .task-item { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-top: 8px; }
+  .task-item h5 { font-size: 13px; color: var(--accent); margin-bottom: 4px; }
+  .task-item p { font-size: 12px; color: var(--muted); }
+  .task-item .deps { font-size: 11px; color: var(--warn); margin-top: 4px; }
+  .status-badge { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 600; margin-left: 8px; }
+  .status-badge.pass { background: rgba(0,184,148,0.15); color: var(--success); }
+  .status-badge.fail { background: rgba(231,76,60,0.15); color: var(--danger); }
+  .tabs { display: flex; gap: 4px; margin-top: 12px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+  .tab { padding: 6px 12px; cursor: pointer; font-size: 12px; color: var(--muted); border-radius: 6px 6px 0 0; }
+  .tab.active { color: var(--accent); background: rgba(108,92,231,0.1); }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+  .section-divider { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px 20px; margin-bottom: 16px; display: flex; align-items: center; gap: 12px; }
+  .section-divider .section-icon { background: var(--accent); color: white; width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700; flex-shrink: 0; }
+  .section-divider .section-icon.s2 { background: #e17055; }
+  .section-divider h2 { font-size: 16px; font-weight: 600; }
+  .section-divider p { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .plan-summary { margin-top: 12px; }
+  .plan-summary .plan-section { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 14px; margin-bottom: 12px; }
+  .plan-summary .plan-section h4 { font-size: 13px; color: var(--accent); margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+  .plan-summary .plan-section h4 .agent-badge { background: rgba(108,92,231,0.15); color: var(--accent); font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 600; }
+  .plan-summary .plan-section pre { font-size: 12px; white-space: pre-wrap; max-height: 250px; overflow-y: auto; margin: 0; }
+  .plan-summary .decision-highlight { border-left: 3px solid var(--accent); background: rgba(108,92,231,0.05); padding: 10px 14px; border-radius: 0 8px 8px 0; margin-bottom: 8px; }
+  .plan-summary .decision-highlight .decision-label { font-size: 11px; color: var(--accent); font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+  .plan-summary .validation-summary { display: flex; gap: 12px; align-items: center; margin-bottom: 8px; }
+  .plan-summary .validation-summary .score { font-size: 24px; font-weight: 700; }
+  .plan-summary .validation-summary .score.pass { color: var(--success); }
+  .plan-summary .validation-summary .score.fail { color: var(--danger); }
+  .plan-summary .task-list { list-style: none; padding: 0; margin: 0; }
+  .plan-summary .task-list li { padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+  .plan-summary .task-list li:last-child { border-bottom: none; }
+  .plan-summary .task-list .task-id { color: var(--accent); font-weight: 600; margin-right: 6px; }
+  .plan-summary .task-list .task-complexity { font-size: 11px; padding: 1px 6px; border-radius: 4px; margin-left: 6px; }
+  .plan-summary .task-list .complexity-low { background: rgba(0,184,148,0.15); color: var(--success); }
+  .plan-summary .task-list .complexity-medium { background: rgba(243,156,18,0.15); color: var(--warn); }
+  .plan-summary .task-list .complexity-high { background: rgba(231,76,60,0.15); color: var(--danger); }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>AI Agent Factory v2</h1>
+  <span class="badge" id="workflowBadge">Full Pipeline</span>
+  <span id="healthBadge" style="margin-left:auto;font-size:12px;color:var(--muted)">checking...</span>
+</div>
+
+<div class="container">
+  <!-- SHARED: Auth & Project Steps -->
+  <div class="step" id="step1">
+    <div class="step-header" onclick="toggleStep('step1')">
+      <div class="step-num" id="step1num">1</div>
+      <div class="step-title">Authentication (Register / Login)</div>
+      <span class="step-status pending" id="step1status">pending</span>
+    </div>
+    <div class="step-body" id="step1body">
+      <div class="grid">
+        <div>
+          <label>Username</label>
+          <input type="text" id="authUser" value="demo">
+        </div>
+        <div>
+          <label>Password</label>
+          <input type="password" id="authPass" value="pass123">
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-primary" onclick="doRegister()">Register</button>
+        <button class="btn btn-primary" onclick="doLogin()">Login</button>
+      </div>
+      <div class="output" id="authOutput"></div>
+    </div>
+  </div>
+
+  <div class="step" id="step2">
+    <div class="step-header" onclick="toggleStep('step2')">
+      <div class="step-num" id="step2num">2</div>
+      <div class="step-title">Create Project</div>
+      <span class="step-status pending" id="step2status">pending</span>
+    </div>
+    <div class="step-body" id="step2body">
+      <label>Project Name</label>
+      <input type="text" id="projName" value="My Test Project">
+      <label>Description</label>
+      <input type="text" id="projDesc" value="Testing Workflows">
+      <div class="btn-row">
+        <button class="btn btn-primary" onclick="doCreateProject()">Create Project</button>
+      </div>
+      <div class="output" id="projOutput"></div>
+    </div>
+  </div>
+
+  <div class="step" id="step3">
+    <div class="step-header" onclick="toggleStep('step3')">
+      <div class="step-num" id="step3num">3</div>
+      <div class="step-title">Upload BRD / PRD Document</div>
+      <span class="step-status pending" id="step3status">pending</span>
+    </div>
+    <div class="step-body" id="step3body">
+      <label>Select file (MD, TXT, PDF, DOCX)</label>
+      <input type="file" id="docFile" accept=".md,.txt,.pdf,.docx,.pptx,.xlsx" style="margin-top:4px">
+      <div class="btn-row">
+        <button class="btn btn-primary" onclick="doUploadDocument()">Upload</button>
+        <button class="btn btn-primary" onclick="doCheckDocStatus()" id="btnCheckDoc" disabled>Check Status</button>
+      </div>
+      <div class="output" id="docOutput"></div>
+    </div>
+  </div>
+
+  <!-- Section 1: Requirements Workflow -->
+  <div class="section-divider">
+    <div class="section-icon">W1</div>
+    <div>
+      <h2>Workflow 1: Requirements</h2>
+      <p>Document upload, gap analysis, clarifications, and requirements approval</p>
+    </div>
+  </div>
+    <div class="step" id="step4">
+      <div class="step-header" onclick="toggleStep('step4')">
+        <div class="step-num" id="step4num">4</div>
+        <div class="step-title">Trigger Requirements Workflow</div>
+        <span class="step-status pending" id="step4status">pending</span>
+      </div>
+      <div class="step-body" id="step4body">
+        <p style="font-size:13px;color:var(--muted)">Requires document status = <span class="tag tag-ready">ready</span></p>
+        <div class="btn-row">
+          <button class="btn btn-primary" onclick="doTriggerRequirements()" id="btnTriggerWf1" disabled>Trigger Workflow</button>
+          <button class="btn btn-primary" onclick="doPollRunStatus()" id="btnPollRun" disabled>Poll Status</button>
+        </div>
+        <div class="output" id="wf1Output"></div>
+      </div>
+    </div>
+
+    <div class="step" id="step5">
+      <div class="step-header" onclick="toggleStep('step5')">
+        <div class="step-num" id="step5num">5</div>
+        <div class="step-title">View & Answer Clarifications (HITL)</div>
+        <span class="step-status pending" id="step5status">pending</span>
+      </div>
+      <div class="step-body" id="step5body">
+        <div class="btn-row" style="margin-top:0">
+          <button class="btn btn-primary" onclick="doGetPendingHitl()" id="btnGetHitl" disabled>Fetch Pending Questions</button>
+        </div>
+        <div id="questionsContainer"></div>
+        <div class="btn-row">
+          <button class="btn btn-success" onclick="doSubmitClarifications()" id="btnSubmitClar" disabled>Submit Answers</button>
+        </div>
+        <div class="output" id="clarOutput"></div>
+      </div>
+    </div>
+
+    <div class="step" id="step6">
+      <div class="step-header" onclick="toggleStep('step6')">
+        <div class="step-num" id="step6num">6</div>
+        <div class="step-title">Approve / Reject Requirements</div>
+        <span class="step-status pending" id="step6status">pending</span>
+      </div>
+      <div class="step-body" id="step6body">
+        <p style="font-size:13px;color:var(--muted)">When run status = <span class="tag tag-ready">awaiting_human</span> at approval stage</p>
+        <label>Feedback (for rejection)</label>
+        <textarea id="rejectFeedback" placeholder="Optional feedback if rejecting..."></textarea>
+        <div class="btn-row">
+          <button class="btn btn-success" onclick="doApproveRequirements()" id="btnApprove" disabled>Approve</button>
+          <button class="btn btn-danger" onclick="doRejectRequirements()" id="btnReject" disabled>Reject with Feedback</button>
+        </div>
+        <div class="output" id="approveOutput"></div>
+      </div>
+    </div>
+
+    <div class="step" id="step7">
+      <div class="step-header" onclick="toggleStep('step7')">
+        <div class="step-num" id="step7num">7</div>
+        <div class="step-title">Requirements Artifacts</div>
+        <span class="step-status pending" id="step7status">pending</span>
+      </div>
+      <div class="step-body" id="step7body">
+        <div class="btn-row" style="margin-top:0">
+          <button class="btn btn-primary" onclick="doGetFinalStatus()" id="btnFinal" disabled>Get Final Status</button>
+          <button class="btn btn-primary" onclick="doGetEvents()" id="btnEvents">View SSE Events</button>
+        </div>
+        <div class="tabs">
+          <div class="tab active" onclick="switchTab('reqMd', this)">Requirements MD</div>
+          <div class="tab" onclick="switchTab('reqJson', this)">Requirements JSON</div>
+          <div class="tab" onclick="switchTab('rawOutput', this)">Raw Output</div>
+        </div>
+        <div class="tab-content active" id="reqMdTab">
+          <div class="output" id="reqMdOutput" style="min-height:100px"></div>
+        </div>
+        <div class="tab-content" id="reqJsonTab">
+          <div class="output" id="reqJsonOutput"></div>
+        </div>
+        <div class="tab-content" id="rawOutputTab">
+          <div class="output" id="finalOutput"></div>
+        </div>
+      </div>
+    </div>
+
+  <!-- Section 2: Planning Workflow -->
+  <div class="section-divider">
+    <div class="section-icon s2">W2</div>
+    <div>
+      <h2>Workflow 2: Planning</h2>
+      <p>Pattern selection, research, architecture, task planning, and validation</p>
+    </div>
+  </div>
+    <div class="step" id="step8">
+      <div class="step-header" onclick="toggleStep('step8')">
+        <div class="step-num" id="step8num">8</div>
+        <div class="step-title">Trigger Planning Workflow</div>
+        <span class="step-status pending" id="step8status">pending</span>
+      </div>
+      <div class="step-body" id="step8body">
+        <p style="font-size:13px;color:var(--muted)">Requires approved requirements from Workflow 1</p>
+        <div class="btn-row">
+          <button class="btn btn-primary" onclick="doTriggerPlanning()" id="btnTriggerWf2" disabled>Trigger Planning</button>
+          <button class="btn btn-primary" onclick="doPollPlanningStatus()" id="btnPollPlanning" disabled>Poll Status</button>
+        </div>
+        <div class="output" id="wf2Output"></div>
+      </div>
+    </div>
+
+    <div class="step" id="step9">
+      <div class="step-header" onclick="toggleStep('step9')">
+        <div class="step-num" id="step9num">9</div>
+        <div class="step-title">Pattern Selection Results</div>
+        <span class="step-status pending" id="step9status">pending</span>
+      </div>
+      <div class="step-body" id="step9body">
+        <div class="btn-row" style="margin-top:0">
+          <button class="btn btn-primary" onclick="doLoadPatterns()" id="btnLoadPatterns" disabled>Load Patterns</button>
+        </div>
+        <div class="output" id="patternsOutput"></div>
+      </div>
+    </div>
+
+    <div class="step" id="step10">
+      <div class="step-header" onclick="toggleStep('step10')">
+        <div class="step-num" id="step10num">10</div>
+        <div class="step-title">Research Findings</div>
+        <span class="step-status pending" id="step10status">pending</span>
+      </div>
+      <div class="step-body" id="step10body">
+        <div class="btn-row" style="margin-top:0">
+          <button class="btn btn-primary" onclick="doLoadResearch()" id="btnLoadResearch" disabled>Load Research</button>
+        </div>
+        <div class="output" id="researchOutput"></div>
+      </div>
+    </div>
+
+    <div class="step" id="step11">
+      <div class="step-header" onclick="toggleStep('step11')">
+        <div class="step-num" id="step11num">11</div>
+        <div class="step-title">Architecture Document</div>
+        <span class="step-status pending" id="step11status">pending</span>
+      </div>
+      <div class="step-body" id="step11body">
+        <div class="btn-row" style="margin-top:0">
+          <button class="btn btn-primary" onclick="doLoadArchitecture()" id="btnLoadArch" disabled>Load Architecture</button>
+        </div>
+        <div class="tabs">
+          <div class="tab active" onclick="switchTab('archMd', this)">Architecture MD</div>
+          <div class="tab" onclick="switchTab('archJson', this)">Architecture JSON</div>
+        </div>
+        <div class="tab-content active" id="archMdTab">
+          <div class="output" id="archMdOutput" style="min-height:100px"></div>
+        </div>
+        <div class="tab-content" id="archJsonTab">
+          <div class="output" id="archJsonOutput"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="step" id="step12">
+      <div class="step-header" onclick="toggleStep('step12')">
+        <div class="step-num" id="step12num">12</div>
+        <div class="step-title">Task Plan</div>
+        <span class="step-status pending" id="step12status">pending</span>
+      </div>
+      <div class="step-body" id="step12body">
+        <div class="btn-row" style="margin-top:0">
+          <button class="btn btn-primary" onclick="doLoadTasks()" id="btnLoadTasks" disabled>Load Tasks</button>
+        </div>
+        <div id="tasksContainer"></div>
+        <div class="output" id="tasksOutput"></div>
+      </div>
+    </div>
+
+    <div class="step" id="step13">
+      <div class="step-header" onclick="toggleStep('step13')">
+        <div class="step-num" id="step13num">13</div>
+        <div class="step-title">Plan Validation</div>
+        <span class="step-status pending" id="step13status">pending</span>
+      </div>
+      <div class="step-body" id="step13body">
+        <div class="btn-row" style="margin-top:0">
+          <button class="btn btn-primary" onclick="doLoadValidation()" id="btnLoadValidation" disabled>Load Validation</button>
+        </div>
+        <div class="output" id="validationOutput"></div>
+      </div>
+    </div>
+
+    <div class="step" id="step14">
+      <div class="step-header" onclick="toggleStep('step14')">
+        <div class="step-num" id="step14num">14</div>
+        <div class="step-title">Approve / Reject Plan</div>
+        <span class="step-status pending" id="step14status">pending</span>
+      </div>
+      <div class="step-body" id="step14body">
+        <p style="font-size:13px;color:var(--muted);margin-bottom:12px">Review the agent's decisions below before approving or rejecting the plan.</p>
+        <div class="btn-row" style="margin-top:0;margin-bottom:12px">
+          <button class="btn btn-primary" onclick="doLoadPlanSummary()" id="btnLoadPlanSummary">Load Plan Summary</button>
+        </div>
+        <div class="plan-summary" id="planSummaryContainer"></div>
+        <hr class="divider">
+        <label>Feedback (for rejection)</label>
+        <textarea id="planRejectFeedback" placeholder="Optional feedback if rejecting..."></textarea>
+        <div class="btn-row">
+          <button class="btn btn-success" onclick="doApprovePlanning()" id="btnApprovePlan" disabled>Approve Plan</button>
+          <button class="btn btn-danger" onclick="doRejectPlanning()" id="btnRejectPlan" disabled>Reject with Feedback</button>
+        </div>
+        <div class="output" id="planApproveOutput"></div>
+      </div>
+    </div>
+
+    <div class="step" id="step15">
+      <div class="step-header" onclick="toggleStep('step15')">
+        <div class="step-num" id="step15num">15</div>
+        <div class="step-title">Final Planning Status</div>
+        <span class="step-status pending" id="step15status">pending</span>
+      </div>
+      <div class="step-body" id="step15body">
+        <div class="btn-row" style="margin-top:0">
+          <button class="btn btn-primary" onclick="doGetPlanningFinalStatus()" id="btnPlanFinal" disabled>Get Final Status</button>
+          <button class="btn btn-primary" onclick="doGetPlanningEvents()" id="btnPlanEvents">View SSE Events</button>
+        </div>
+        <div class="output" id="planFinalOutput"></div>
+      </div>
+    </div>
+
+  <!-- Activity Log -->
+  <div class="step">
+    <div class="step-header" onclick="toggleStep('logBody')">
+      <div class="step-num" style="background:var(--muted)">L</div>
+      <div class="step-title">Activity Log</div>
+      <button class="btn btn-primary" style="padding:4px 12px;font-size:12px" onclick="event.stopPropagation();clearLog()">Clear</button>
+    </div>
+    <div class="step-body open" id="logBody">
+      <div id="activityLog" style="max-height:300px;overflow-y:auto"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = '';
+let state = {
+  token: null,
+  projectId: null,
+  documentId: null,
+  docStatus: null,
+  currentWorkflow: 'requirements',
+  wf1: { runId: null, runStatus: null, questions: null },
+  wf2: { runId: null, runStatus: null },
+  planningArtifacts: null
+};
+
+function log(msg, cls = 'info') {
+  const el = document.getElementById('activityLog');
+  const ts = new Date().toLocaleTimeString();
+  el.innerHTML += `<div class="log-line ${cls}"><span class="ts">${ts}</span>${msg}</div>`;
+  el.scrollTop = el.scrollHeight;
+}
+function clearLog() { document.getElementById('activityLog').innerHTML = ''; }
+
+function toggleStep(id) {
+  const body = document.getElementById(id + 'body');
+  if (body) body.classList.toggle('open');
+}
+
+function showOutput(id, data, isError = false) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.className = 'output ' + (isError ? 'error' : 'success');
+  el.textContent = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+}
+
+function setStep(num, status) {
+  const numEl = document.getElementById('step' + num + 'num');
+  const statusEl = document.getElementById('step' + num + 'status');
+  if (numEl) numEl.className = 'step-num ' + status;
+  if (statusEl) {
+    statusEl.className = 'step-status ' + status;
+    statusEl.textContent = status;
+  }
+}
+
+function switchWorkflow(wf) {
+  state.currentWorkflow = wf;
+}
+
+function switchTab(tabName, el) {
+  const parent = el.closest('.step-body');
+  parent.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+
+  const suffixes = ['reqMd', 'reqJson', 'rawOutput', 'archMd', 'archJson'];
+  const tabMap = {
+    'reqMd': 'reqMdTab',
+    'reqJson': 'reqJsonTab',
+    'rawOutput': 'rawOutputTab',
+    'archMd': 'archMdTab',
+    'archJson': 'archJsonTab'
+  };
+
+  Object.values(tabMap).forEach(id => {
+    const tabEl = document.getElementById(id);
+    if (tabEl && tabEl.closest('.step-body') === parent) {
+      tabEl.classList.remove('active');
+    }
+  });
+
+  const targetId = tabMap[tabName];
+  if (targetId) {
+    const targetEl = document.getElementById(targetId);
+    if (targetEl && targetEl.closest('.step-body') === parent) {
+      targetEl.classList.add('active');
+    }
+  }
+}
+
+function headers() { return { 'Authorization': 'Bearer ' + state.token, 'Content-Type': 'application/json' }; }
+
+async function api(method, path, body = null, isForm = false) {
+  const opts = { method, headers: {} };
+  if (state.token) opts.headers['Authorization'] = 'Bearer ' + state.token;
+  if (body && !isForm) { opts.headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(body); }
+  if (body && isForm) { opts.body = body; }
+  const res = await fetch(API + path, opts);
+  const json = await res.json().catch(() => null);
+  if (!res.ok) throw { status: res.status, data: json };
+  return json;
+}
+
+// ===== SHARED: AUTH =====
+async function doRegister() {
+  try {
+    const u = document.getElementById('authUser').value, p = document.getElementById('authPass').value;
+    log('Registering user: ' + u);
+    const r = await api('POST', '/auth/register', { username: u, password: p });
+    showOutput('authOutput', r);
+    log('Registered: ' + r.user_id, 'ok');
+  } catch (e) { showOutput('authOutput', e, true); log('Register failed: ' + (e.data?.detail || e.status), 'err'); }
+}
+
+async function doLogin() {
+  try {
+    const u = document.getElementById('authUser').value, p = document.getElementById('authPass').value;
+    log('Logging in: ' + u);
+    const r = await api('POST', '/auth/login', { username: u, password: p });
+    state.token = r.access_token;
+    showOutput('authOutput', { user_id: r.user_id, token: r.access_token.substring(0, 30) + '...' });
+    setStep(1, 'done');
+    document.getElementById('step1num').textContent = '\u2713';
+    log('Login successful', 'ok');
+    document.getElementById('btnTriggerWf2').disabled = false;
+    document.getElementById('btnTriggerWf1').disabled = !state.docStatus || state.docStatus !== 'ready';
+  } catch (e) { showOutput('authOutput', e, true); log('Login failed', 'err'); }
+}
+
+// ===== SHARED: PROJECT =====
+async function doCreateProject() {
+  try {
+    const name = document.getElementById('projName').value, desc = document.getElementById('projDesc').value;
+    log('Creating project: ' + name);
+    const r = await api('POST', '/projects', { name, description: desc });
+    state.projectId = r.id;
+    showOutput('projOutput', r);
+    setStep(2, 'done');
+    document.getElementById('step2num').textContent = '\u2713';
+    log('Project created: ' + r.id, 'ok');
+    document.getElementById('btnCheckDoc').disabled = false;
+  } catch (e) { showOutput('projOutput', e, true); log('Project creation failed', 'err'); }
+}
+
+// ===== SHARED: UPLOAD =====
+async function doUploadDocument() {
+  try {
+    const file = document.getElementById('docFile').files[0];
+    if (!file) { log('Select a file first', 'err'); return; }
+    if (!state.projectId) { log('Create a project first', 'err'); return; }
+    log('Uploading: ' + file.name);
+    const fd = new FormData();
+    fd.append('file', file);
+    const r = await api('POST', `/projects/${state.projectId}/documents`, fd, true);
+    state.documentId = r.id;
+    state.docStatus = r.status;
+    showOutput('docOutput', r);
+    log('Uploaded, doc_id: ' + r.id + ' status: ' + r.status, 'ok');
+    document.getElementById('btnCheckDoc').disabled = false;
+  } catch (e) { showOutput('docOutput', e, true); log('Upload failed', 'err'); }
+}
+
+async function doCheckDocStatus() {
+  try {
+    if (!state.documentId) { log('Upload a document first', 'err'); return; }
+    log('Checking document status...');
+    const r = await api('GET', `/projects/${state.projectId}/documents/${state.documentId}`);
+    state.docStatus = r.status;
+    showOutput('docOutput', r);
+    log('Document status: ' + r.status, r.status === 'ready' ? 'ok' : 'info');
+    if (r.status === 'ready') {
+      setStep(3, 'done');
+      document.getElementById('step3num').textContent = '\u2713';
+      document.getElementById('btnTriggerWf1').disabled = false;
+      document.getElementById('btnTriggerWf2').disabled = false;
+    } else if (r.status === 'failed') {
+      setStep(3, 'error');
+    } else {
+      setStep(3, 'active');
+    }
+  } catch (e) { showOutput('docOutput', e, true); log('Status check failed', 'err'); }
+}
+
+// ===== WF1: REQUIREMENTS =====
+async function doTriggerRequirements() {
+  try {
+    if (state.docStatus !== 'ready') { log('Document not ready', 'err'); return; }
+    log('Triggering requirements workflow...');
+    const r = await api('POST', `/projects/${state.projectId}/workflows/requirements`, {});
+    state.wf1.runId = r.id;
+    state.wf1.runStatus = r.status;
+    showOutput('wf1Output', r);
+    setStep(4, 'active');
+    log('Requirements workflow triggered, run_id: ' + r.id, 'ok');
+    document.getElementById('btnPollRun').disabled = false;
+    document.getElementById('btnGetHitl').disabled = false;
+    document.getElementById('btnFinal').disabled = false;
+  } catch (e) { showOutput('wf1Output', e, true); log('Trigger failed', 'err'); }
+}
+
+async function doPollRunStatus() {
+  try {
+    if (!state.wf1.runId) { log('Trigger workflow first', 'err'); return; }
+    log('Polling run status...');
+    const r = await api('GET', `/projects/${state.projectId}/runs/${state.wf1.runId}`);
+    state.wf1.runStatus = r.status;
+    showOutput('wf1Output', r);
+    log('Run status: ' + r.status + ' (node: ' + (r.current_node || 'n/a') + ')', r.status === 'completed' ? 'ok' : 'info');
+
+    if (r.status === 'completed') {
+      setStep(4, 'done');
+      document.getElementById('step4num').textContent = '\u2713';
+      setStep(7, 'active');
+      document.getElementById('btnApprove').disabled = true;
+      document.getElementById('btnReject').disabled = true;
+      await loadRequirementsArtifacts();
+    } else if (r.status === 'awaiting_human') {
+      setStep(4, 'done');
+      document.getElementById('step4num').textContent = '\u2713';
+      document.getElementById('btnGetHitl').disabled = false;
+      if (r.current_node === 'synthesized' || r.current_node === 'validation') {
+        document.getElementById('btnApprove').disabled = false;
+        document.getElementById('btnReject').disabled = false;
+      }
+    } else if (r.status === 'failed') {
+      setStep(4, 'error');
+    }
+  } catch (e) { showOutput('wf1Output', e, true); log('Poll failed', 'err'); }
+}
+
+async function doGetPendingHitl() {
+  try {
+    if (!state.wf1.runId) { log('No active run', 'err'); return; }
+    log('Fetching pending HITL questions...');
+    const r = await api('GET', `/projects/${state.projectId}/runs/${state.wf1.runId}/pending-hitl`);
+    state.wf1.questions = r;
+    showOutput('clarOutput', r);
+
+    const container = document.getElementById('questionsContainer');
+    container.innerHTML = '';
+
+    if (!r.pending) {
+      log('No pending questions (status: ' + r.status + ')');
+      document.getElementById('btnSubmitClar').disabled = true;
+      if (r.current_node === 'synthesized' || r.current_node === 'validation') {
+        document.getElementById('btnApprove').disabled = false;
+        document.getElementById('btnReject').disabled = false;
+        setStep(5, 'done');
+        document.getElementById('step5num').textContent = '\u2713';
+        setStep(6, 'active');
+      }
+      return;
+    }
+
+    setStep(5, 'active');
+    document.getElementById('btnSubmitClar').disabled = false;
+    const questions = r.pending.questions || [];
+    log('Found ' + questions.length + ' questions', 'ok');
+
+    questions.forEach((q, i) => {
+      const card = document.createElement('div');
+      card.className = 'question-card';
+      card.innerHTML = `
+        <div class="q-title">Q${i + 1}: ${q.question}</div>
+        <div class="q-context">${q.context || ''}</div>
+        <textarea id="ans_${q.question_id}" placeholder="Your answer..."></textarea>
+      `;
+      container.appendChild(card);
+    });
+  } catch (e) { showOutput('clarOutput', e, true); log('Fetch HITL failed', 'err'); }
+}
+
+async function doSubmitClarifications() {
+  try {
+    if (!state.wf1.questions || !state.wf1.questions.pending) { log('No pending questions', 'err'); return; }
+    const questions = state.wf1.questions.pending.questions || [];
+    const answers = questions.map(q => ({
+      question_id: q.question_id,
+      answer: document.getElementById('ans_' + q.question_id)?.value || 'No answer provided'
+    }));
+    log('Submitting ' + answers.length + ' clarification answers...');
+    const r = await api('POST', `/projects/${state.projectId}/runs/${state.wf1.runId}/clarifications`, { answers });
+    showOutput('clarOutput', r);
+    setStep(5, 'done');
+    document.getElementById('step5num').textContent = '\u2713';
+    log('Clarifications submitted', 'ok');
+    document.getElementById('btnSubmitClar').disabled = true;
+    document.getElementById('btnPollRun').disabled = false;
+  } catch (e) { showOutput('clarOutput', e, true); log('Submit clarifications failed', 'err'); }
+}
+
+async function doApproveRequirements() {
+  try {
+    if (!state.wf1.runId) { log('No active run', 'err'); return; }
+    log('Approving requirements...');
+    const r = await api('POST', `/projects/${state.projectId}/runs/${state.wf1.runId}/approve`, { approved: true });
+    showOutput('approveOutput', r);
+    setStep(6, 'done');
+    document.getElementById('step6num').textContent = '\u2713';
+    log('Requirements approved', 'ok');
+    document.getElementById('btnApprove').disabled = true;
+    document.getElementById('btnReject').disabled = true;
+    document.getElementById('btnPollRun').disabled = false;
+    document.getElementById('btnTriggerWf2').disabled = false;
+  } catch (e) { showOutput('approveOutput', e, true); log('Approve failed', 'err'); }
+}
+
+async function doRejectRequirements() {
+  try {
+    if (!state.wf1.runId) { log('No active run', 'err'); return; }
+    const feedback = document.getElementById('rejectFeedback').value || 'Needs more detail';
+    log('Rejecting with feedback...');
+    const r = await api('POST', `/projects/${state.projectId}/runs/${state.wf1.runId}/reject`, { feedback });
+    showOutput('approveOutput', r);
+    setStep(6, 'error');
+    log('Requirements rejected', 'info');
+    document.getElementById('btnApprove').disabled = true;
+    document.getElementById('btnReject').disabled = true;
+    document.getElementById('btnPollRun').disabled = false;
+  } catch (e) { showOutput('approveOutput', e, true); log('Reject failed', 'err'); }
+}
+
+async function loadRequirementsArtifacts() {
+  try {
+    log('Loading requirements artifacts...');
+    const r = await api('GET', `/projects/${state.projectId}/runs/${state.wf1.runId}`);
+    showOutput('finalOutput', r);
+
+    try {
+      const mdRes = await fetch(API + `/projects/${state.projectId}/runs/${state.wf1.runId}/artifacts/requirements.md`, {
+        headers: { 'Authorization': 'Bearer ' + state.token }
+      });
+      if (mdRes.ok) {
+        const mdText = await mdRes.text();
+        showOutput('reqMdOutput', mdText);
+      } else {
+        showOutput('reqMdOutput', '(Requirements MD not available yet)');
+      }
+    } catch { showOutput('reqMdOutput', '(Requirements MD not available yet)'); }
+
+    try {
+      const jsonRes = await fetch(API + `/projects/${state.projectId}/runs/${state.wf1.runId}/artifacts/requirements.json`, {
+        headers: { 'Authorization': 'Bearer ' + state.token }
+      });
+      if (jsonRes.ok) {
+        const jsonData = await jsonRes.json();
+        showOutput('reqJsonOutput', jsonData);
+      } else {
+        showOutput('reqJsonOutput', '(Requirements JSON not available yet)');
+      }
+    } catch { showOutput('reqJsonOutput', '(Requirements JSON not available yet)'); }
+
+    setStep(7, 'done');
+    document.getElementById('step7num').textContent = '\u2713';
+    log('Requirements artifacts loaded', 'ok');
+  } catch (e) { showOutput('finalOutput', e, true); log('Load artifacts failed', 'err'); }
+}
+
+async function doGetFinalStatus() {
+  try {
+    if (!state.wf1.runId) { log('No run to check', 'err'); return; }
+    log('Getting final run status...');
+    const r = await api('GET', `/projects/${state.projectId}/runs/${state.wf1.runId}`);
+    state.wf1.runStatus = r.status;
+    showOutput('finalOutput', r);
+    log('Final status: ' + r.status, r.status === 'completed' ? 'ok' : 'info');
+  } catch (e) { showOutput('finalOutput', e, true); log('Final status failed', 'err'); }
+}
+
+async function doGetEvents() {
+  try {
+    const runId = state.wf1.runId || state.wf2.runId;
+    if (!runId) { log('No run to check events', 'err'); return; }
+    log('Fetching SSE events...');
+    const r = await fetch(API + `/projects/${state.projectId}/runs/${runId}/events`, {
+      headers: { 'Authorization': 'Bearer ' + state.token }
+    });
+    const text = await r.text();
+    showOutput('finalOutput', text || '(no events yet)');
+    log('Events fetched', 'ok');
+  } catch (e) { showOutput('finalOutput', e, true); log('Events fetch failed', 'err'); }
+}
+
+// ===== WF2: PLANNING =====
+async function doTriggerPlanning() {
+  try {
+    if (!state.projectId) { log('Create a project first', 'err'); return; }
+    log('Triggering planning workflow...');
+    const r = await api('POST', `/projects/${state.projectId}/workflows/planning`, {});
+    state.wf2.runId = r.id;
+    state.wf2.runStatus = r.status;
+    showOutput('wf2Output', r);
+    setStep(8, 'active');
+    log('Planning workflow triggered, run_id: ' + r.id, 'ok');
+    document.getElementById('btnPollPlanning').disabled = false;
+    document.getElementById('btnPlanFinal').disabled = false;
+  } catch (e) { showOutput('wf2Output', e, true); log('Trigger planning failed', 'err'); }
+}
+
+async function doPollPlanningStatus() {
+  try {
+    if (!state.wf2.runId) { log('Trigger planning first', 'err'); return; }
+    log('Polling planning status...');
+    const r = await api('GET', `/projects/${state.projectId}/runs/${state.wf2.runId}`);
+    state.wf2.runStatus = r.status;
+    showOutput('wf2Output', r);
+    log('Planning status: ' + r.status + ' (node: ' + (r.current_node || 'n/a') + ')', r.status === 'completed' ? 'ok' : 'info');
+
+    if (r.status === 'completed') {
+      setStep(8, 'done');
+      document.getElementById('step8num').textContent = '\u2713';
+      document.getElementById('btnLoadPatterns').disabled = false;
+      document.getElementById('btnLoadResearch').disabled = false;
+      document.getElementById('btnLoadArch').disabled = false;
+      document.getElementById('btnLoadTasks').disabled = false;
+      document.getElementById('btnLoadValidation').disabled = false;
+      document.getElementById('btnApprovePlan').disabled = true;
+      document.getElementById('btnRejectPlan').disabled = true;
+      setStep(15, 'active');
+    } else if (r.status === 'awaiting_human') {
+      setStep(8, 'done');
+      document.getElementById('step8num').textContent = '\u2713';
+      document.getElementById('btnApprovePlan').disabled = false;
+      document.getElementById('btnRejectPlan').disabled = false;
+      setStep(14, 'active');
+      doLoadPlanSummary();
+    } else if (r.status === 'failed') {
+      setStep(8, 'error');
+    }
+  } catch (e) { showOutput('wf2Output', e, true); log('Poll planning failed', 'err'); }
+}
+
+async function doLoadPatterns() {
+  try {
+    if (!state.wf2.runId) { log('No planning run', 'err'); return; }
+    log('Loading selected patterns...');
+    const r = await api('GET', `/projects/${state.projectId}/runs/${state.wf2.runId}/artifacts/selected_patterns.json`);
+    showOutput('patternsOutput', r);
+    setStep(9, 'done');
+    document.getElementById('step9num').textContent = '\u2713';
+    log('Patterns loaded', 'ok');
+  } catch (e) { showOutput('patternsOutput', e, true); log('Load patterns failed', 'err'); }
+}
+
+async function doLoadResearch() {
+  try {
+    if (!state.wf2.runId) { log('No planning run', 'err'); return; }
+    log('Loading research findings...');
+    const r = await api('GET', `/projects/${state.projectId}/runs/${state.wf2.runId}/artifacts/research_findings.json`);
+    showOutput('researchOutput', r);
+    setStep(10, 'done');
+    document.getElementById('step10num').textContent = '\u2713';
+    log('Research loaded', 'ok');
+  } catch (e) { showOutput('researchOutput', e, true); log('Load research failed', 'err'); }
+}
+
+async function doLoadArchitecture() {
+  try {
+    if (!state.wf2.runId) { log('No planning run', 'err'); return; }
+    log('Loading architecture...');
+
+    try {
+      const res = await fetch(`${API}/projects/${state.projectId}/runs/${state.wf2.runId}/artifacts/architecture.md`, { headers: state.token ? { 'Authorization': 'Bearer ' + state.token } : {} });
+      if (res.ok) {
+        const md = await res.text();
+        showOutput('archMdOutput', md);
+      } else {
+        showOutput('archMdOutput', '(Architecture MD not available)');
+      }
+    } catch (e) {
+      showOutput('archMdOutput', '(Architecture MD not available)');
+    }
+
+    try {
+      const j = await api('GET', `/projects/${state.projectId}/runs/${state.wf2.runId}/artifacts/architecture.json`);
+      showOutput('archJsonOutput', j);
+    } catch (e) {
+      showOutput('archJsonOutput', '(Architecture JSON not available)');
+    }
+
+    setStep(11, 'done');
+    document.getElementById('step11num').textContent = '\u2713';
+    log('Architecture loaded', 'ok');
+  } catch (e) { showOutput('archMdOutput', e, true); log('Load architecture failed', 'err'); }
+}
+
+async function doLoadTasks() {
+  try {
+    if (!state.wf2.runId) { log('No planning run', 'err'); return; }
+    log('Loading task plan...');
+    const tasks = await api('GET', `/projects/${state.projectId}/runs/${state.wf2.runId}/artifacts/task_plan.json`);
+
+    const container = document.getElementById('tasksContainer');
+    container.innerHTML = '';
+
+    if (Array.isArray(tasks) && tasks.length > 0) {
+      tasks.forEach((t, i) => {
+        const item = document.createElement('div');
+        item.className = 'task-item';
+        item.innerHTML = `
+          <h5>${t.task_id || 'task_' + (i+1)}: ${t.title || 'Untitled'}</h5>
+          <p>${t.description || 'No description'}</p>
+          <div class="deps">Dependencies: ${(t.dependencies || []).join(', ') || 'None'} | Patterns: ${(t.pattern_refs || []).join(', ') || 'None'}</div>
+        `;
+        container.appendChild(item);
+      });
+      setStep(12, 'done');
+      document.getElementById('step12num').textContent = '\u2713';
+    }
+
+    showOutput('tasksOutput', tasks);
+    log('Tasks loaded: ' + (Array.isArray(tasks) ? tasks.length : 0), 'ok');
+  } catch (e) { showOutput('tasksOutput', e, true); log('Load tasks failed', 'err'); }
+}
+
+async function doLoadValidation() {
+  try {
+    if (!state.wf2.runId) { log('No planning run', 'err'); return; }
+    log('Loading validation results...');
+    const r = await api('GET', `/projects/${state.projectId}/runs/${state.wf2.runId}/artifacts/task_validation.json`);
+    showOutput('validationOutput', r);
+    setStep(13, 'done');
+    document.getElementById('step13num').textContent = '\u2713';
+    log('Validation loaded', 'ok');
+  } catch (e) { showOutput('validationOutput', e, true); log('Load validation failed', 'err'); }
+}
+
+async function doLoadPlanSummary() {
+  try {
+    if (!state.wf2.runId) { log('No planning run', 'err'); return; }
+    log('Loading plan summary for review...');
+    const container = document.getElementById('planSummaryContainer');
+    container.innerHTML = '<p style="color:var(--muted)">Loading artifacts...</p>';
+
+    const fetchJson = async (file) => {
+      try { return await api('GET', `/projects/${state.projectId}/runs/${state.wf2.runId}/artifacts/${file}`); }
+      catch { return null; }
+    };
+    const fetchText = async (file) => {
+      try {
+        const res = await fetch(`${API}/projects/${state.projectId}/runs/${state.wf2.runId}/artifacts/${file}`, { headers: state.token ? { 'Authorization': 'Bearer ' + state.token } : {} });
+        return res.ok ? await res.text() : null;
+      } catch { return null; }
+    };
+
+    const [patterns, research, archMd, archJson, tasks, validation] = await Promise.all([
+      fetchJson('selected_patterns.json'),
+      fetchJson('research_findings.json'),
+      fetchText('architecture.md'),
+      fetchJson('architecture.json'),
+      fetchJson('task_plan.json'),
+      fetchJson('task_validation.json'),
+    ]);
+
+    let html = '';
+
+    if (patterns && patterns.length) {
+      html += `<div class="plan-section">
+        <h4><span class="agent-badge">AGENT DECISION</span> Pattern Selection</h4>
+        <div class="decision-highlight">
+          <div class="decision-label">Selected by Agent</div>
+          ${patterns.map(p => `<div><strong>${p.name}</strong>: ${p.rationale || 'No rationale'}</div>`).join('')}
+        </div>
+      </div>`;
+    }
+
+    if (research && research.length) {
+      const docFindings = research.filter(f => f.source_type === 'doc');
+      const kbFindings = research.filter(f => f.source_type === 'kb');
+      const webFindings = research.filter(f => f.source_type === 'web');
+      html += `<div class="plan-section">
+        <h4><span class="agent-badge">AGENT RESEARCH</span> Research Findings</h4>
+        <div class="decision-highlight">
+          <div class="decision-label">Gathered by Agent from ${research.length} sources</div>
+          <div style="font-size:12px;margin-bottom:6px">Document: ${docFindings.length} | Knowledge Base: ${kbFindings.length} | Web: ${webFindings.length}</div>
+          ${research.slice(0, 5).map(f => `<div style="font-size:12px;margin-top:4px"><span style="color:var(--accent);font-weight:600">[${f.source_type.toUpperCase()}]</span> ${(f.claim || '').substring(0, 150)}${(f.claim||'').length > 150 ? '...' : ''}</div>`).join('')}
+          ${research.length > 5 ? `<div style="font-size:11px;color:var(--muted);margin-top:4px">+${research.length - 5} more findings</div>` : ''}
+        </div>
+      </div>`;
+    }
+
+    if (archMd) {
+      html += `<div class="plan-section">
+        <h4><span class="agent-badge">AGENT DECISION</span> Architecture Design</h4>
+        <div class="decision-highlight">
+          <div class="decision-label">Designed by Agent</div>
+          <pre>${archMd}</pre>
+        </div>
+      </div>`;
+    }
+
+    if (tasks && tasks.length) {
+      html += `<div class="plan-section">
+        <h4><span class="agent-badge">AGENT DECISION</span> Task Plan (${tasks.length} tasks)</h4>
+        <div class="decision-highlight">
+          <div class="decision-label">Planned by Agent</div>
+          <ul class="task-list">
+            ${tasks.map(t => {
+              const c = t.estimated_complexity || 'medium';
+              const cls = c === 'low' ? 'complexity-low' : c === 'high' ? 'complexity-high' : 'complexity-medium';
+              return `<li><span class="task-id">${t.task_id}</span> ${t.title || 'Untitled'}
+                <span class="task-complexity ${cls}">${c}</span>
+                ${t.pattern_refs && t.pattern_refs.length ? `<span style="font-size:11px;color:var(--accent);margin-left:6px">[${t.pattern_refs.join(', ')}]</span>` : ''}
+                ${t.dependencies && t.dependencies.length ? `<span style="font-size:11px;color:var(--muted);margin-left:6px">deps: ${t.dependencies.join(', ')}</span>` : ''}
+              </li>`;
+            }).join('')}
+          </ul>
+        </div>
+      </div>`;
+    }
+
+    if (validation) {
+      const isValid = validation.valid;
+      const score = validation.score || 0;
+      html += `<div class="plan-section">
+        <h4><span class="agent-badge">AGENT VALIDATION</span> Plan Validation</h4>
+        <div class="decision-highlight">
+          <div class="validation-summary">
+            <div class="score ${isValid ? 'pass' : 'fail'}">${score}/100</div>
+            <div>
+              <div style="font-weight:600;color:${isValid ? 'var(--success)' : 'var(--danger)'}">${isValid ? 'PASSED' : 'NEEDS IMPROVEMENT'}</div>
+              <div style="font-size:12px;color:var(--muted)">${validation.feedback || ''}</div>
+            </div>
+          </div>
+          ${validation.coverage ? `<div style="font-size:12px;margin-top:6px">Covered: ${(validation.coverage.covered_requirements||[]).join(', ') || 'None'} | Uncovered: ${(validation.coverage.uncovered_requirements||[]).join(', ') || 'None'}</div>` : ''}
+          ${validation.suggestions && validation.suggestions.length ? `<div style="font-size:12px;margin-top:6px;color:var(--warn)">Suggestions: ${validation.suggestions.filter(Boolean).join('; ')}</div>` : ''}
+        </div>
+      </div>`;
+    }
+
+    if (!html) html = '<p style="color:var(--muted)">No artifacts found. The plan may still be generating.</p>';
+    container.innerHTML = html;
+    log('Plan summary loaded', 'ok');
+  } catch (e) { document.getElementById('planSummaryContainer').innerHTML = `<p style="color:var(--danger)">Failed to load plan summary</p>`; log('Load plan summary failed', 'err'); }
+}
+
+async function doApprovePlanning() {
+  try {
+    if (!state.wf2.runId) { log('No active run', 'err'); return; }
+    log('Approving plan...');
+    const r = await api('POST', `/projects/${state.projectId}/runs/${state.wf2.runId}/approve`, { approved: true });
+    setStep(14, 'done');
+    document.getElementById('step14num').textContent = '\u2713';
+    showOutput('planApproveOutput', { message: 'Plan approved successfully!' });
+    log('Plan approved', 'ok');
+    document.getElementById('btnApprovePlan').disabled = true;
+    document.getElementById('btnRejectPlan').disabled = true;
+    setStep(15, 'active');
+  } catch (e) { showOutput('planApproveOutput', e, true); log('Approve plan failed', 'err'); }
+}
+
+async function doRejectPlanning() {
+  try {
+    if (!state.wf2.runId) { log('No active run', 'err'); return; }
+    const feedback = document.getElementById('planRejectFeedback').value || 'Needs improvement';
+    log('Rejecting plan with feedback...');
+    const r = await api('POST', `/projects/${state.projectId}/runs/${state.wf2.runId}/reject`, { feedback });
+    setStep(14, 'active');
+    log('Plan rejected — agent is revising based on your feedback...', 'info');
+    showOutput('planApproveOutput', { message: 'Rejection submitted. Agent is revising the plan based on your feedback. Polling for updated plan...' });
+    document.getElementById('btnApprovePlan').disabled = true;
+    document.getElementById('btnRejectPlan').disabled = true;
+    document.getElementById('planSummaryContainer').innerHTML = '<p style="color:var(--muted)">Agent is revising the plan...</p>';
+    _pollForRevisedPlan();
+  } catch (e) { showOutput('planApproveOutput', e, true); log('Reject plan failed', 'err'); }
+}
+
+async function _pollForRevisedPlan() {
+  for (let i = 0; i < 30; i++) {
+    await new Promise(f => setTimeout(f, 5000));
+    try {
+      const r = await api('GET', `/projects/${state.projectId}/runs/${state.wf2.runId}`);
+      state.wf2.runStatus = r.status;
+      if (r.status === 'awaiting_human' && r.current_node === 'approval') {
+        log('Revised plan ready for review', 'ok');
+        document.getElementById('btnApprovePlan').disabled = false;
+        document.getElementById('btnRejectPlan').disabled = false;
+        doLoadPlanSummary();
+        return;
+      }
+      if (r.status === 'completed') {
+        log('Plan finalized', 'ok');
+        setStep(14, 'done');
+        document.getElementById('step14num').textContent = '✓';
+        setStep(15, 'active');
+        return;
+      }
+      if (r.status === 'failed') {
+        log('Planning workflow failed', 'err');
+        setStep(14, 'error');
+        return;
+      }
+    } catch (e) { /* ignore poll errors */ }
+  }
+  log('Polling timed out — check status manually', 'err');
+}
+
+async function doGetPlanningFinalStatus() {
+  try {
+    if (!state.wf2.runId) { log('No planning run', 'err'); return; }
+    log('Getting planning final status...');
+    const r = await api('GET', `/projects/${state.projectId}/runs/${state.wf2.runId}`);
+    state.wf2.runStatus = r.status;
+    showOutput('planFinalOutput', r);
+    log('Planning final status: ' + r.status, r.status === 'completed' ? 'ok' : 'info');
+
+    if (r.status === 'completed') {
+      setStep(15, 'done');
+      document.getElementById('step15num').textContent = '\u2713';
+    }
+  } catch (e) { showOutput('planFinalOutput', e, true); log('Planning final status failed', 'err'); }
+}
+
+async function doGetPlanningEvents() {
+  try {
+    if (!state.wf2.runId) { log('No planning run', 'err'); return; }
+    log('Fetching planning SSE events...');
+    const r = await fetch(API + `/projects/${state.projectId}/runs/${state.wf2.runId}/events`, {
+      headers: { 'Authorization': 'Bearer ' + state.token }
+    });
+    const text = await r.text();
+    showOutput('planFinalOutput', text || '(no events yet)');
+    log('Planning events fetched', 'ok');
+  } catch (e) { showOutput('planFinalOutput', e, true); log('Planning events fetch failed', 'err'); }
+}
+
+// ===== INIT =====
+async function checkHealth() {
+  try {
+    const r = await fetch(API + '/healthz');
+    const j = await r.json();
+    document.getElementById('healthBadge').textContent = j.status === 'healthy' ? 'Healthy' : 'Degraded';
+    document.getElementById('healthBadge').style.color = j.status === 'healthy' ? 'var(--success)' : 'var(--warn)';
+  } catch { document.getElementById('healthBadge').textContent = 'Offline'; document.getElementById('healthBadge').style.color = 'var(--danger)'; }
+}
+checkHealth();
+document.getElementById('step1body').classList.add('open');
+</script>
+</body>
+</html>

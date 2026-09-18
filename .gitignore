@@ -1,2 +1,68 @@
-plan.md
-problem.md
+# Environment
+.env
+.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Testing / Coverage
+.pytest_cache/
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+
+# Type checking
+.mypy_cache/
+.pytype/
+
+# Data & Runtime
+data/
+
+# Logs
+*.log
+console-*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+nul
+
+# Playwright
+.playwright-mcp/
+
+# Screenshots / temporary images
+*.png
+*.jpg
+*.jpeg
+
+# Completion reports (auto-generated)
+*_Completion_Report.md
+
+# Test artifacts
+test_doc.md
+test_e2e_*.py
+
+# Node (if any tooling)
+node_modules/
+
+# LangGraph checkpoints (runtime data, not source)
+*.sqlite
