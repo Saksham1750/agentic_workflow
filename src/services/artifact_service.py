@@ -121,6 +121,16 @@ class ArtifactService:
 
         state = {}
 
+        md_path = f"{runs_dir}/requirements.md"
+        if await file_store.file_exists(md_path):
+            content = await file_store.read_file(md_path)
+            state["requirements_md"] = content.decode("utf-8")
+
+        json_path = f"{runs_dir}/requirements.json"
+        if await file_store.file_exists(json_path):
+            content = await file_store.read_file(json_path)
+            state["requirements_json"] = json.loads(content.decode("utf-8"))
+
         json_path = f"{runs_dir}/selected_patterns.json"
         if await file_store.file_exists(json_path):
             content = await file_store.read_file(json_path)
@@ -135,6 +145,15 @@ class ArtifactService:
         if await file_store.file_exists(json_path):
             content = await file_store.read_file(json_path)
             state["tasks"] = json.loads(content.decode("utf-8"))
+
+        logger.info(
+            "Loaded planning state: md=%s, json=%s, patterns=%d, arch=%s, tasks=%d",
+            "yes" if "requirements_md" in state else "no",
+            "yes" if "requirements_json" in state else "no",
+            len(state.get("selected_patterns", [])),
+            "yes" if "architecture_json" in state else "no",
+            len(state.get("tasks", [])),
+        )
 
         return state
 

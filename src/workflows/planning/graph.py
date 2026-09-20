@@ -14,22 +14,42 @@ logger = logging.getLogger(__name__)
 
 
 async def load_requirements_node(state: dict) -> dict:
+    import asyncio
     from src.services.artifact_service import artifact_service
     from src.database import async_session_factory
     from src.models.run import Run
+    from src.services.run_service import run_service
     from sqlalchemy import select
 
-    project_id = state.get("project_id", "")
+    run_id = state.get("run_id", "")
+    try:
+        await run_service.update_run_status(run_id, "running", current_node="load_requirements")
+    except Exception:
+        pass
 
-    async with async_session_factory() as db:
-        result = await db.execute(
-            select(Run).where(
-                Run.project_id == project_id,
-                Run.workflow_type == "requirements",
-                Run.status == "completed",
-            ).order_by(Run.created_at.desc()).limit(1)
-        )
-        req_run = result.scalar_one_or_none()
+    project_id = state.get("project_id", "")
+    logger.info("[PLANNING] load_requirements_node START for project %s", project_id)
+
+    try:
+        async with asyncio.timeout(10):
+            async with async_session_factory() as db:
+                result = await db.execute(
+                    select(Run).where(
+                        Run.project_id == project_id,
+                        Run.workflow_type == "requirements",
+                        Run.status == "completed",
+                    ).order_by(Run.created_at.desc()).limit(1)
+                )
+                req_run = result.scalar_one_or_none()
+    except asyncio.TimeoutError:
+        logger.error("[PLANNING] load_requirements_node DB query TIMED OUT for project %s", project_id)
+        return {
+            "requirements_md": None,
+            "requirements_json": {},
+            "current_phase": "load_error",
+        }
+
+    logger.info("[PLANNING] load_requirements_node DB query done, req_run=%s", req_run.id if req_run else None)
 
     if req_run:
         requirements_md, requirements_json = await artifact_service.load_requirements(
@@ -47,27 +67,63 @@ async def load_requirements_node(state: dict) -> dict:
 
 
 async def pattern_selection_node(state: dict) -> dict:
+    from src.services.run_service import run_service
+    run_id = state.get("run_id", "")
+    try:
+        await run_service.update_run_status(run_id, "running", current_node="pattern_selection")
+    except Exception:
+        pass
     return await pattern_selector_agent.select_patterns(state)
 
 
 async def research_node(state: dict) -> dict:
+    from src.services.run_service import run_service
+    run_id = state.get("run_id", "")
+    try:
+        await run_service.update_run_status(run_id, "running", current_node="research")
+    except Exception:
+        pass
     return await researcher_agent.research(state)
 
 
 async def architecture_node(state: dict) -> dict:
+    from src.services.run_service import run_service
+    run_id = state.get("run_id", "")
+    try:
+        await run_service.update_run_status(run_id, "running", current_node="architecture")
+    except Exception:
+        pass
     return await architect_agent.design_architecture(state)
 
 
 async def lightweight_planning_node(state: dict) -> dict:
+    from src.services.run_service import run_service
+    run_id = state.get("run_id", "")
+    try:
+        await run_service.update_run_status(run_id, "running", current_node="lightweight_planning")
+    except Exception:
+        pass
     return await planner_agent.create_task_plan(state)
 
 
 async def full_planning_node(state: dict) -> dict:
+    from src.services.run_service import run_service
+    run_id = state.get("run_id", "")
+    try:
+        await run_service.update_run_status(run_id, "running", current_node="full_planning")
+    except Exception:
+        pass
     result = await planner_agent.create_task_plan(state)
     return result
 
 
 async def validation_node(state: dict) -> dict:
+    from src.services.run_service import run_service
+    run_id = state.get("run_id", "")
+    try:
+        await run_service.update_run_status(run_id, "running", current_node="validation")
+    except Exception:
+        pass
     result = await critic_agent.validate_plan(state)
     result["iteration_count"] = state.get("iteration_count", 0) + 1
     return result
@@ -75,6 +131,12 @@ async def validation_node(state: dict) -> dict:
 
 async def approval_node(state: dict) -> dict:
     from langgraph.types import interrupt
+    from src.services.run_service import run_service
+    run_id = state.get("run_id", "")
+    try:
+        await run_service.update_run_status(run_id, "running", current_node="approval")
+    except Exception:
+        pass
 
     tasks = state.get("tasks", [])
     validation = state.get("task_validation", {})

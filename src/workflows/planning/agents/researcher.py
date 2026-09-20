@@ -1,6 +1,6 @@
 import logging
 from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_openai import ChatOpenAI
+from langchain_groq import ChatGroq
 
 from src.services.rag_service import rag_service
 from src.services.pattern_service import pattern_service
@@ -46,10 +46,10 @@ Your role is to gather information from multiple sources and synthesize findings
 class ResearcherAgent:
     def __init__(self):
         self.llm = None
-        if settings.OPENAI_API_KEY:
-            self.llm = ChatOpenAI(
-                model="gpt-4o",
-                api_key=settings.OPENAI_API_KEY,
+        if settings.GROQ_API_KEY:
+            self.llm = ChatGroq(
+                model=settings.LLM_MODEL,
+                api_key=settings.GROQ_API_KEY,
                 temperature=0.3,
             )
         self._ddgs = None

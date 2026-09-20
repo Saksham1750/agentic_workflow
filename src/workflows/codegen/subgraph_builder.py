@@ -15,6 +15,7 @@ class TaskSubgraphState(TypedDict):
     requirements_md: str | None
     architecture_json: dict | None
     selected_patterns: list[dict]
+    workspace_files: list[dict]
     generated_files: list[dict]
     workflow_review: dict | None
     prompt_review: dict | None
@@ -28,6 +29,7 @@ class TaskSubgraphState(TypedDict):
 async def developer_node(state: dict) -> dict:
     current_task = state.get("current_task", {})
     review_feedback = state.get("review_feedback")
+    workspace_files = state.get("workspace_files", [])
 
     existing_state = {
         "tasks": [current_task],
@@ -35,7 +37,7 @@ async def developer_node(state: dict) -> dict:
         "requirements_md": state.get("requirements_md"),
         "architecture_json": state.get("architecture_json"),
         "selected_patterns": state.get("selected_patterns", []),
-        "workspace_files": state.get("generated_files", []),
+        "workspace_files": workspace_files,
         "review_feedback": review_feedback,
     }
 
@@ -45,6 +47,66 @@ async def developer_node(state: dict) -> dict:
         "generated_files": result.get("workspace_files", []),
         "current_phase": "code_generated",
     }
+
+
+async def validate_code_node(state: dict) -> dict:
+    generated_files = state.get("generated_files", [])
+    issues = []
+
+    for f in generated_files:
+        path = f.get("path", "")
+        content = f.get("content", "")
+        if not path.endswith(".py"):
+            continue
+
+        try:
+            compile(content, path, "exec")
+        except SyntaxError as e:
+            issues.append(f"Syntax error in {path}: {e}")
+
+        missing_imports = _check_imports(content)
+        if missing_imports:
+            issues.append(f"{path}: may need packages: {', '.join(missing_imports)}")
+
+    if issues:
+        return {
+            "review_feedback": "Code validation issues:\n" + "\n".join(f"- {i}" for i in issues),
+            "review_verdict": "fail",
+            "current_phase": "validation_failed",
+        }
+
+    return {"current_phase": "validation_passed"}
+
+
+def _check_imports(content: str) -> list[str]:
+    import ast
+
+    third_party = {
+        "fastapi", "uvicorn", "sqlalchemy", "aiosqlite", "pydantic",
+        "langchain", "langchain_core", "langchain_groq", "langgraph",
+        "chromadb", "httpx", "aiofiles", "jwt", "passlib", "multipart",
+        "yaml", "markdown", "pypdf", "docx", "pptx", "openpyxl",
+        "numpy", "pandas", "requests", "aiohttp", "celery", "redis",
+        "jinja2", "alembic", "psycopg2", "asyncpg", "motor", "pymongo",
+    }
+
+    missing = []
+    try:
+        tree = ast.parse(content)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    pkg = alias.name.split(".")[0]
+                    if pkg in third_party:
+                        missing.append(pkg)
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                pkg = node.module.split(".")[0]
+                if pkg in third_party:
+                    missing.append(pkg)
+    except SyntaxError:
+        pass
+
+    return list(set(missing))
 
 
 async def parallel_reviewers_node(state: dict) -> dict:
@@ -134,11 +196,22 @@ def build_task_subgraph():
     graph = StateGraph(TaskSubgraphState)
 
     graph.add_node("developer", developer_node)
+    graph.add_node("validate_code", validate_code_node)
     graph.add_node("parallel_reviewers", parallel_reviewers_node)
     graph.add_node("reduce_reviews", reduce_reviews_node)
 
     graph.add_edge(START, "developer")
-    graph.add_edge("developer", "parallel_reviewers")
+    graph.add_edge("developer", "validate_code")
+
+    graph.add_conditional_edges(
+        "validate_code",
+        lambda s: "skip_review" if s.get("current_phase") == "validation_failed" else "review",
+        {
+            "review": "parallel_reviewers",
+            "skip_review": "parallel_reviewers",
+        },
+    )
+
     graph.add_edge("parallel_reviewers", "reduce_reviews")
 
     graph.add_conditional_edges(

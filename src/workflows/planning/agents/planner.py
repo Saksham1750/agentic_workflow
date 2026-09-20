@@ -1,7 +1,7 @@
 import json
 import logging
 from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_openai import ChatOpenAI
+from langchain_groq import ChatGroq
 
 from src.config import get_settings
 
@@ -49,10 +49,10 @@ Your role is to decompose the architecture into an ordered, code-ready task list
 class PlannerAgent:
     def __init__(self):
         self.llm = None
-        if settings.OPENAI_API_KEY:
-            self.llm = ChatOpenAI(
-                model="gpt-4o",
-                api_key=settings.OPENAI_API_KEY,
+        if settings.GROQ_API_KEY:
+            self.llm = ChatGroq(
+                model=settings.LLM_MODEL,
+                api_key=settings.GROQ_API_KEY,
                 temperature=0.3,
             )
 

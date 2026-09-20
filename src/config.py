@@ -11,7 +11,8 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRATION_MINUTES: int = 60
 
-    OPENAI_API_KEY: str = ""
+    GROQ_API_KEY: str = ""
+    LLM_MODEL: str = "qwen/qwen3.8-27b"
 
     SQLITE_DB_PATH: str = "./data/app.db"
     CHECKPOINT_DB_PATH: str = "./data/checkpoints.sqlite"

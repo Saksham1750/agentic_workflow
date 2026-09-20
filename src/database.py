@@ -11,6 +11,8 @@ Path(settings.SQLITE_DB_PATH).parent.mkdir(parents=True, exist_ok=True)
 engine = create_async_engine(
     f"sqlite+aiosqlite:///{settings.SQLITE_DB_PATH}",
     echo=False,
+    pool_pre_ping=True,
+    connect_args={"timeout": 15},
 )
 
 async_session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)

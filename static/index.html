@@ -108,6 +108,21 @@
   .plan-summary .task-list .complexity-low { background: rgba(0,184,148,0.15); color: var(--success); }
   .plan-summary .task-list .complexity-medium { background: rgba(243,156,18,0.15); color: var(--warn); }
   .plan-summary .task-list .complexity-high { background: rgba(231,76,60,0.15); color: var(--danger); }
+  .section-divider .section-icon.s3 { background: #00cec9; }
+  .file-tree { list-style: none; padding: 0; margin: 0; }
+  .file-tree li { padding: 4px 0; font-size: 13px; font-family: 'Cascadia Code', monospace; display: flex; align-items: center; gap: 6px; }
+  .file-tree li .file-icon { color: var(--accent); font-size: 12px; }
+  .file-tree li .file-size { color: var(--muted); font-size: 11px; margin-left: auto; }
+  .upload-queue { margin-top: 12px; }
+  .upload-queue-item { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; margin-bottom: 6px; display: flex; align-items: center; gap: 10px; font-size: 13px; }
+  .upload-queue-item .file-name { flex: 1; font-weight: 500; }
+  .upload-queue-item .file-size { color: var(--muted); font-size: 11px; }
+  .upload-queue-item .status { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 6px; }
+  .upload-queue-item .status.pending { background: rgba(139,143,163,0.15); color: var(--muted); }
+  .upload-queue-item .status.uploading { background: rgba(243,156,18,0.15); color: var(--warn); }
+  .upload-queue-item .status.done { background: rgba(0,184,148,0.15); color: var(--success); }
+  .upload-queue-item .status.error { background: rgba(231,76,60,0.15); color: var(--danger); }
+  .upload-queue-item .remove-btn { background: none; border: none; color: var(--danger); cursor: pointer; font-size: 16px; padding: 0 4px; }
 </style>
 </head>
 <body>
@@ -170,10 +185,12 @@
       <span class="step-status pending" id="step3status">pending</span>
     </div>
     <div class="step-body" id="step3body">
-      <label>Select file (MD, TXT, PDF, DOCX)</label>
-      <input type="file" id="docFile" accept=".md,.txt,.pdf,.docx,.pptx,.xlsx" style="margin-top:4px">
+      <label>Select files (MD, TXT, PDF, DOCX, PPTX, XLSX) — multiple files allowed</label>
+      <input type="file" id="docFile" accept=".md,.txt,.pdf,.docx,.pptx,.xlsx" multiple style="margin-top:4px" onchange="handleFileSelect()">
+      <div class="upload-queue" id="uploadQueue"></div>
       <div class="btn-row">
-        <button class="btn btn-primary" onclick="doUploadDocument()">Upload</button>
+        <button class="btn btn-primary" onclick="doUploadAllDocuments()" id="btnUploadAll" disabled>Upload All</button>
+        <button class="btn btn-warn" onclick="clearUploadQueue()">Clear Queue</button>
         <button class="btn btn-primary" onclick="doCheckDocStatus()" id="btnCheckDoc" disabled>Check Status</button>
       </div>
       <div class="output" id="docOutput"></div>
@@ -410,6 +427,116 @@
       </div>
     </div>
 
+  <!-- Section 3: Code Generation Workflow -->
+  <div class="section-divider">
+    <div class="section-icon s3">W3</div>
+    <div>
+      <h2>Workflow 3: Code Generation</h2>
+      <p>Developer agent executes tasks, reviewers validate, bundle generated for download</p>
+    </div>
+  </div>
+    <div class="step" id="step16">
+      <div class="step-header" onclick="toggleStep('step16')">
+        <div class="step-num" id="step16num">16</div>
+        <div class="step-title">Trigger Code Generation</div>
+        <span class="step-status pending" id="step16status">pending</span>
+      </div>
+      <div class="step-body" id="step16body">
+        <p style="font-size:13px;color:var(--muted)">Requires approved plan from Workflow 2</p>
+        <div class="btn-row">
+          <button class="btn btn-primary" onclick="doTriggerCodegen()" id="btnTriggerWf3" disabled>Trigger Code Generation</button>
+          <button class="btn btn-primary" onclick="doPollCodegenStatus()" id="btnPollCodegen" disabled>Poll Status</button>
+        </div>
+        <div class="output" id="wf3Output"></div>
+      </div>
+    </div>
+
+    <div class="step" id="step17">
+      <div class="step-header" onclick="toggleStep('step17')">
+        <div class="step-num" id="step17num">17</div>
+        <div class="step-title">Generated Files</div>
+        <span class="step-status pending" id="step17status">pending</span>
+      </div>
+      <div class="step-body" id="step17body">
+        <div class="btn-row" style="margin-top:0">
+          <button class="btn btn-primary" onclick="doLoadGeneratedFiles()" id="btnLoadFiles" disabled>Load Generated Files</button>
+        </div>
+        <div id="fileTreeContainer"></div>
+        <div class="output" id="filesOutput"></div>
+      </div>
+    </div>
+
+    <div class="step" id="step18">
+      <div class="step-header" onclick="toggleStep('step18')">
+        <div class="step-num" id="step18num">18</div>
+        <div class="step-title">Review Results</div>
+        <span class="step-status pending" id="step18status">pending</span>
+      </div>
+      <div class="step-body" id="step18body">
+        <div class="btn-row" style="margin-top:0">
+          <button class="btn btn-primary" onclick="doLoadCodegenArtifacts()" id="btnLoadCodegenArt" disabled>Load Artifacts</button>
+        </div>
+        <div class="tabs">
+          <div class="tab active" onclick="switchTab('codegenFiles', this)">Generated Files</div>
+          <div class="tab" onclick="switchTab('codegenManifest', this)">MANIFEST</div>
+        </div>
+        <div class="tab-content active" id="codegenFilesTab">
+          <div class="output" id="codegenFilesOutput" style="min-height:100px"></div>
+        </div>
+        <div class="tab-content" id="codegenManifestTab">
+          <div class="output" id="codegenManifestOutput"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="step" id="step19">
+      <div class="step-header" onclick="toggleStep('step19')">
+        <div class="step-num" id="step19num">19</div>
+        <div class="step-title">Approve / Reject Generated Code</div>
+        <span class="step-status pending" id="step19status">pending</span>
+      </div>
+      <div class="step-body" id="step19body">
+        <p style="font-size:13px;color:var(--muted)">When run status = <span class="tag tag-ready">awaiting_human</span> at approval stage</p>
+        <label>Feedback (for rejection)</label>
+        <textarea id="codegenRejectFeedback" placeholder="Optional feedback if rejecting..."></textarea>
+        <div class="btn-row">
+          <button class="btn btn-success" onclick="doApproveCodegen()" id="btnApproveCodegen" disabled>Approve Code</button>
+          <button class="btn btn-danger" onclick="doRejectCodegen()" id="btnRejectCodegen" disabled>Reject with Feedback</button>
+        </div>
+        <div class="output" id="codegenApproveOutput"></div>
+      </div>
+    </div>
+
+    <div class="step" id="step20">
+      <div class="step-header" onclick="toggleStep('step20')">
+        <div class="step-num" id="step20num">20</div>
+        <div class="step-title">Download Bundle</div>
+        <span class="step-status pending" id="step20status">pending</span>
+      </div>
+      <div class="step-body" id="step20body">
+        <div class="btn-row" style="margin-top:0">
+          <button class="btn btn-primary" onclick="doLoadBundleInfo()" id="btnBundleInfo" disabled>Load Bundle Info</button>
+          <button class="btn btn-success" onclick="doDownloadBundle()" id="btnDownloadBundle" disabled>Download bundle.zip</button>
+        </div>
+        <div class="output" id="bundleOutput"></div>
+      </div>
+    </div>
+
+    <div class="step" id="step21">
+      <div class="step-header" onclick="toggleStep('step21')">
+        <div class="step-num" id="step21num">21</div>
+        <div class="step-title">Final Codegen Status</div>
+        <span class="step-status pending" id="step21status">pending</span>
+      </div>
+      <div class="step-body" id="step21body">
+        <div class="btn-row" style="margin-top:0">
+          <button class="btn btn-primary" onclick="doGetCodegenFinalStatus()" id="btnCodegenFinal" disabled>Get Final Status</button>
+          <button class="btn btn-primary" onclick="doGetCodegenEvents()" id="btnCodegenEvents">View SSE Events</button>
+        </div>
+        <div class="output" id="codegenFinalOutput"></div>
+      </div>
+    </div>
+
   <!-- Activity Log -->
   <div class="step">
     <div class="step-header" onclick="toggleStep('logBody')">
@@ -433,6 +560,7 @@ let state = {
   currentWorkflow: 'requirements',
   wf1: { runId: null, runStatus: null, questions: null },
   wf2: { runId: null, runStatus: null },
+  wf3: { runId: null, runStatus: null },
   planningArtifacts: null
 };
 
@@ -475,13 +603,15 @@ function switchTab(tabName, el) {
   parent.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   el.classList.add('active');
 
-  const suffixes = ['reqMd', 'reqJson', 'rawOutput', 'archMd', 'archJson'];
+  const suffixes = ['reqMd', 'reqJson', 'rawOutput', 'archMd', 'archJson', 'codegenFiles', 'codegenManifest'];
   const tabMap = {
     'reqMd': 'reqMdTab',
     'reqJson': 'reqJsonTab',
     'rawOutput': 'rawOutputTab',
     'archMd': 'archMdTab',
-    'archJson': 'archJsonTab'
+    'archJson': 'archJsonTab',
+    'codegenFiles': 'codegenFilesTab',
+    'codegenManifest': 'codegenManifestTab'
   };
 
   Object.values(tabMap).forEach(id => {
@@ -555,21 +685,81 @@ async function doCreateProject() {
 }
 
 // ===== SHARED: UPLOAD =====
-async function doUploadDocument() {
-  try {
-    const file = document.getElementById('docFile').files[0];
-    if (!file) { log('Select a file first', 'err'); return; }
-    if (!state.projectId) { log('Create a project first', 'err'); return; }
-    log('Uploading: ' + file.name);
-    const fd = new FormData();
-    fd.append('file', file);
-    const r = await api('POST', `/projects/${state.projectId}/documents`, fd, true);
-    state.documentId = r.id;
-    state.docStatus = r.status;
-    showOutput('docOutput', r);
-    log('Uploaded, doc_id: ' + r.id + ' status: ' + r.status, 'ok');
-    document.getElementById('btnCheckDoc').disabled = false;
-  } catch (e) { showOutput('docOutput', e, true); log('Upload failed', 'err'); }
+let uploadQueue = [];
+let documentIds = [];
+
+function handleFileSelect() {
+  const input = document.getElementById('docFile');
+  const files = Array.from(input.files);
+  files.forEach(f => {
+    if (!uploadQueue.find(q => q.name === f.name && q.size === f.size)) {
+      uploadQueue.push({ file: f, name: f.name, size: f.size, status: 'pending' });
+    }
+  });
+  input.value = '';
+  renderUploadQueue();
+}
+
+function renderUploadQueue() {
+  const container = document.getElementById('uploadQueue');
+  container.innerHTML = '';
+  uploadQueue.forEach((item, i) => {
+    const sizeStr = item.size > 1024*1024 ? (item.size/1024/1024).toFixed(1)+' MB' : item.size > 1024 ? (item.size/1024).toFixed(1)+' KB' : item.size+' B';
+    const div = document.createElement('div');
+    div.className = 'upload-queue-item';
+    div.innerHTML = `
+      <span class="file-name">${item.name}</span>
+      <span class="file-size">${sizeStr}</span>
+      <span class="status ${item.status}">${item.status}</span>
+      ${item.status === 'pending' ? `<button class="remove-btn" onclick="removeFromQueue(${i})">&times;</button>` : ''}
+    `;
+    container.appendChild(div);
+  });
+  document.getElementById('btnUploadAll').disabled = uploadQueue.filter(q => q.status === 'pending').length === 0;
+}
+
+function removeFromQueue(index) {
+  uploadQueue.splice(index, 1);
+  renderUploadQueue();
+}
+
+function clearUploadQueue() {
+  uploadQueue = [];
+  renderUploadQueue();
+  documentIds = [];
+}
+
+async function doUploadAllDocuments() {
+  if (!state.projectId) { log('Create a project first', 'err'); return; }
+  const pending = uploadQueue.filter(q => q.status === 'pending');
+  if (pending.length === 0) { log('No files to upload', 'err'); return; }
+
+  log(`Uploading ${pending.length} file(s) sequentially...`);
+  setStep(3, 'active');
+
+  for (const item of pending) {
+    item.status = 'uploading';
+    renderUploadQueue();
+    try {
+      const fd = new FormData();
+      fd.append('file', item.file);
+      const r = await api('POST', `/projects/${state.projectId}/documents`, fd, true);
+      item.status = 'done';
+      item.docId = r.id;
+      documentIds.push(r.id);
+      log(`Uploaded: ${item.name} (id: ${r.id}, status: ${r.status})`, 'ok');
+    } catch (e) {
+      item.status = 'error';
+      log(`Failed to upload ${item.name}: ${e.data?.detail || e.status || e}`, 'err');
+    }
+    renderUploadQueue();
+  }
+
+  state.documentId = documentIds[documentIds.length - 1];
+  state.docStatus = 'uploaded';
+  showOutput('docOutput', { uploaded: documentIds.length, document_ids: documentIds });
+  document.getElementById('btnCheckDoc').disabled = false;
+  log(`All uploads complete. ${documentIds.length} document(s) queued for processing.`, 'ok');
 }
 
 async function doCheckDocStatus() {
@@ -829,6 +1019,7 @@ async function doPollPlanningStatus() {
       document.getElementById('btnApprovePlan').disabled = true;
       document.getElementById('btnRejectPlan').disabled = true;
       setStep(15, 'active');
+      document.getElementById('btnTriggerWf3').disabled = false;
     } else if (r.status === 'awaiting_human') {
       setStep(8, 'done');
       document.getElementById('step8num').textContent = '\u2713';
@@ -1058,6 +1249,8 @@ async function doApprovePlanning() {
     document.getElementById('btnApprovePlan').disabled = true;
     document.getElementById('btnRejectPlan').disabled = true;
     setStep(15, 'active');
+    document.getElementById('btnTriggerWf3').disabled = false;
+    log('Code generation workflow is now available', 'ok');
   } catch (e) { showOutput('planApproveOutput', e, true); log('Approve plan failed', 'err'); }
 }
 
@@ -1095,6 +1288,7 @@ async function _pollForRevisedPlan() {
         setStep(14, 'done');
         document.getElementById('step14num').textContent = '✓';
         setStep(15, 'active');
+        document.getElementById('btnTriggerWf3').disabled = false;
         return;
       }
       if (r.status === 'failed') {
@@ -1134,6 +1328,214 @@ async function doGetPlanningEvents() {
     showOutput('planFinalOutput', text || '(no events yet)');
     log('Planning events fetched', 'ok');
   } catch (e) { showOutput('planFinalOutput', e, true); log('Planning events fetch failed', 'err'); }
+}
+
+// ===== WF3: CODE GENERATION =====
+async function doTriggerCodegen() {
+  try {
+    if (!state.projectId) { log('Create a project first', 'err'); return; }
+    log('Triggering code generation workflow...');
+    const r = await api('POST', `/projects/${state.projectId}/workflows/codegen`, {});
+    state.wf3.runId = r.id;
+    state.wf3.runStatus = r.status;
+    showOutput('wf3Output', r);
+    setStep(16, 'active');
+    log('Code generation triggered, run_id: ' + r.id, 'ok');
+    document.getElementById('btnPollCodegen').disabled = false;
+    document.getElementById('btnCodegenFinal').disabled = false;
+  } catch (e) { showOutput('wf3Output', e, true); log('Trigger codegen failed', 'err'); }
+}
+
+async function doPollCodegenStatus() {
+  try {
+    if (!state.wf3.runId) { log('Trigger codegen first', 'err'); return; }
+    log('Polling codegen status...');
+    const r = await api('GET', `/projects/${state.projectId}/runs/${state.wf3.runId}`);
+    state.wf3.runStatus = r.status;
+    showOutput('wf3Output', r);
+    log('Codegen status: ' + r.status + ' (node: ' + (r.current_node || 'n/a') + ')', r.status === 'completed' ? 'ok' : 'info');
+
+    if (r.status === 'completed') {
+      setStep(16, 'done');
+      document.getElementById('step16num').textContent = '\u2713';
+      document.getElementById('btnLoadFiles').disabled = false;
+      document.getElementById('btnLoadCodegenArt').disabled = false;
+      document.getElementById('btnBundleInfo').disabled = false;
+      document.getElementById('btnDownloadBundle').disabled = false;
+      document.getElementById('btnApproveCodegen').disabled = true;
+      document.getElementById('btnRejectCodegen').disabled = true;
+      setStep(21, 'active');
+    } else if (r.status === 'awaiting_human') {
+      setStep(16, 'done');
+      document.getElementById('step16num').textContent = '\u2713';
+      document.getElementById('btnApproveCodegen').disabled = false;
+      document.getElementById('btnRejectCodegen').disabled = false;
+      setStep(19, 'active');
+    } else if (r.status === 'failed') {
+      setStep(16, 'error');
+    }
+  } catch (e) { showOutput('wf3Output', e, true); log('Poll codegen failed', 'err'); }
+}
+
+async function doLoadGeneratedFiles() {
+  try {
+    if (!state.wf3.runId) { log('No codegen run', 'err'); return; }
+    log('Loading generated files...');
+    const r = await api('GET', `/projects/${state.projectId}/runs/${state.wf3.runId}/artifacts`);
+    showOutput('filesOutput', r);
+
+    const container = document.getElementById('fileTreeContainer');
+    container.innerHTML = '';
+
+    if (r.artifacts && r.artifacts.length > 0) {
+      const ul = document.createElement('ul');
+      ul.className = 'file-tree';
+      r.artifacts.forEach(f => {
+        if (f.filename === 'MANIFEST.json') return;
+        const li = document.createElement('li');
+        const sizeStr = f.size > 1024 ? (f.size / 1024).toFixed(1) + ' KB' : f.size + ' B';
+        li.innerHTML = `<span class="file-icon">&#128196;</span> ${f.filename} <span class="file-size">${sizeStr}</span>`;
+        ul.appendChild(li);
+      });
+      container.appendChild(ul);
+      setStep(17, 'done');
+      document.getElementById('step17num').textContent = '\u2713';
+    } else {
+      container.innerHTML = '<p style="color:var(--muted);font-size:13px;margin-top:8px">No files generated yet. The workflow may still be running.</p>';
+    }
+    log('Generated files loaded', 'ok');
+  } catch (e) { showOutput('filesOutput', e, true); log('Load generated files failed', 'err'); }
+}
+
+async function doLoadCodegenArtifacts() {
+  try {
+    if (!state.wf3.runId) { log('No codegen run', 'err'); return; }
+    log('Loading codegen artifacts...');
+
+    try {
+      const res = await fetch(`${API}/projects/${state.projectId}/runs/${state.wf3.runId}/artifacts/bundle.zip`, {
+        headers: { 'Authorization': 'Bearer ' + state.token }
+      });
+      if (res.ok) {
+        showOutput('codegenFilesOutput', '(bundle.zip available — ' + res.headers.get('content-length') + ' bytes)');
+      } else {
+        showOutput('codegenFilesOutput', '(bundle.zip not available yet)');
+      }
+    } catch { showOutput('codegenFilesOutput', '(bundle.zip not available yet)'); }
+
+    try {
+      const manifest = await api('GET', `/projects/${state.projectId}/runs/${state.wf3.runId}/artifacts/MANIFEST.json`);
+      showOutput('codegenManifestOutput', manifest);
+    } catch { showOutput('codegenManifestOutput', '(MANIFEST.json not available)'); }
+
+    setStep(18, 'done');
+    document.getElementById('step18num').textContent = '\u2713';
+    log('Codegen artifacts loaded', 'ok');
+  } catch (e) { showOutput('codegenFilesOutput', e, true); log('Load codegen artifacts failed', 'err'); }
+}
+
+async function doApproveCodegen() {
+  try {
+    if (!state.wf3.runId) { log('No active run', 'err'); return; }
+    log('Approving generated code...');
+    const r = await api('POST', `/projects/${state.projectId}/runs/${state.wf3.runId}/approve`, { approved: true });
+    showOutput('codegenApproveOutput', r);
+    setStep(19, 'done');
+    document.getElementById('step19num').textContent = '\u2713';
+    log('Code generation approved', 'ok');
+    document.getElementById('btnApproveCodegen').disabled = true;
+    document.getElementById('btnRejectCodegen').disabled = true;
+    document.getElementById('btnPollCodegen').disabled = false;
+  } catch (e) { showOutput('codegenApproveOutput', e, true); log('Approve codegen failed', 'err'); }
+}
+
+async function doRejectCodegen() {
+  try {
+    if (!state.wf3.runId) { log('No active run', 'err'); return; }
+    const feedback = document.getElementById('codegenRejectFeedback').value || 'Needs improvement';
+    log('Rejecting with feedback...');
+    const r = await api('POST', `/projects/${state.projectId}/runs/${state.wf3.runId}/reject`, { feedback });
+    showOutput('codegenApproveOutput', r);
+    setStep(19, 'error');
+    log('Code generation rejected', 'info');
+    document.getElementById('btnApproveCodegen').disabled = true;
+    document.getElementById('btnRejectCodegen').disabled = true;
+    document.getElementById('btnPollCodegen').disabled = false;
+  } catch (e) { showOutput('codegenApproveOutput', e, true); log('Reject codegen failed', 'err'); }
+}
+
+async function doLoadBundleInfo() {
+  try {
+    if (!state.wf3.runId) { log('No codegen run', 'err'); return; }
+    log('Loading bundle info...');
+    const r = await api('GET', `/projects/${state.projectId}/runs/${state.wf3.runId}/artifacts`);
+    showOutput('bundleOutput', r);
+
+    if (r.artifacts && r.artifacts.some(f => f.filename === 'bundle.zip')) {
+      setStep(20, 'done');
+      document.getElementById('step20num').textContent = '\u2713';
+      document.getElementById('btnDownloadBundle').disabled = false;
+      log('Bundle available for download', 'ok');
+    } else {
+      setStep(20, 'active');
+      log('Bundle not yet available', 'info');
+    }
+  } catch (e) { showOutput('bundleOutput', e, true); log('Load bundle info failed', 'err'); }
+}
+
+async function doDownloadBundle() {
+  try {
+    if (!state.wf3.runId) { log('No codegen run', 'err'); return; }
+    log('Downloading bundle.zip...');
+    const a = document.createElement('a');
+    a.href = `${API}/projects/${state.projectId}/runs/${state.wf3.runId}/artifacts/bundle.zip`;
+    a.download = 'bundle.zip';
+    a.target = '_blank';
+
+    const res = await fetch(a.href, { headers: { 'Authorization': 'Bearer ' + state.token } });
+    if (res.ok) {
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      a.href = url;
+      a.download = 'bundle.zip';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      log('Bundle downloaded', 'ok');
+    } else {
+      log('Download failed: ' + res.status, 'err');
+    }
+  } catch (e) { log('Download failed: ' + (e.message || e), 'err'); }
+}
+
+async function doGetCodegenFinalStatus() {
+  try {
+    if (!state.wf3.runId) { log('No codegen run', 'err'); return; }
+    log('Getting codegen final status...');
+    const r = await api('GET', `/projects/${state.projectId}/runs/${state.wf3.runId}`);
+    state.wf3.runStatus = r.status;
+    showOutput('codegenFinalOutput', r);
+    log('Codegen final status: ' + r.status, r.status === 'completed' ? 'ok' : 'info');
+
+    if (r.status === 'completed') {
+      setStep(21, 'done');
+      document.getElementById('step21num').textContent = '\u2713';
+    }
+  } catch (e) { showOutput('codegenFinalOutput', e, true); log('Codegen final status failed', 'err'); }
+}
+
+async function doGetCodegenEvents() {
+  try {
+    if (!state.wf3.runId) { log('No codegen run', 'err'); return; }
+    log('Fetching codegen SSE events...');
+    const r = await fetch(API + `/projects/${state.projectId}/runs/${state.wf3.runId}/events`, {
+      headers: { 'Authorization': 'Bearer ' + state.token }
+    });
+    const text = await r.text();
+    showOutput('codegenFinalOutput', text || '(no events yet)');
+    log('Codegen events fetched', 'ok');
+  } catch (e) { showOutput('codegenFinalOutput', e, true); log('Codegen events fetch failed', 'err'); }
 }
 
 // ===== INIT =====

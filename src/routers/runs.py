@@ -149,9 +149,15 @@ async def _execute_requirements_workflow(run_id: str, project_id: str, thread_id
 async def _execute_planning_workflow(run_id: str, project_id: str, thread_id: str):
     from src.workflows.planning.graph import build_planning_graph
     from src.workflows.checkpointer import get_checkpointer
+    import time
 
-    checkpointer = await get_checkpointer()
-    graph = await build_planning_graph(checkpointer=checkpointer)
+    try:
+        checkpointer = await get_checkpointer()
+        graph = await build_planning_graph(checkpointer=checkpointer)
+    except Exception as e:
+        logger.exception("Failed to build planning graph for run %s", run_id)
+        await run_service.update_run_status(run_id, "failed", error=f"Graph build failed: {e}")
+        return
 
     config = {"configurable": {"thread_id": thread_id}, "recursion_limit": 50}
     initial_state = {
@@ -177,24 +183,21 @@ async def _execute_planning_workflow(run_id: str, project_id: str, thread_id: st
         "approval_result": None,
     }
 
-    nodes = [
-        "load_requirements",
-        "complexity_router",
-        "pattern_selection",
-        "research",
-        "architecture",
-        "planning",
-        "validation",
-        "approval",
-    ]
+    start_time = time.monotonic()
 
-    for node in nodes:
-        await sse_service.emit_event(run_id=run_id, event_type="node_started", node_name=node)
+    try:
+        await run_service.update_run_status(run_id, "running", current_node="starting")
 
-    result = await graph.ainvoke(initial_state, config)
+        result = await graph.ainvoke(initial_state, config)
 
-    for node in nodes:
-        await sse_service.emit_event(run_id=run_id, event_type="node_completed", node_name=node)
+        elapsed = time.monotonic() - start_time
+        logger.info("[PLANNING] Graph execution completed in %.1fs", elapsed)
+
+    except Exception as e:
+        elapsed = time.monotonic() - start_time
+        logger.exception("[PLANNING] Graph execution failed after %.1fs for run %s", elapsed, run_id)
+        await run_service.update_run_status(run_id, "failed", error=str(e))
+        return
 
     current_phase = result.get("current_phase", "unknown")
 
@@ -241,9 +244,15 @@ async def _execute_planning_workflow(run_id: str, project_id: str, thread_id: st
 async def _execute_codegen_workflow(run_id: str, project_id: str, thread_id: str):
     from src.workflows.codegen.graph import build_codegen_graph
     from src.workflows.checkpointer import get_checkpointer
+    import time
 
-    checkpointer = await get_checkpointer()
-    graph = await build_codegen_graph(checkpointer=checkpointer)
+    try:
+        checkpointer = await get_checkpointer()
+        graph = await build_codegen_graph(checkpointer=checkpointer)
+    except Exception as e:
+        logger.exception("Failed to build codegen graph for run %s", run_id)
+        await run_service.update_run_status(run_id, "failed", error=f"Graph build failed: {e}")
+        return
 
     config = {"configurable": {"thread_id": thread_id}, "recursion_limit": 100}
     initial_state = {
@@ -266,25 +275,30 @@ async def _execute_codegen_workflow(run_id: str, project_id: str, thread_id: str
         "approval_result": None,
     }
 
-    nodes = [
-        "load_artifacts",
-        "execute_task",
-        "process_next",
-        "bundle_and_save",
-        "approval",
-    ]
+    start_time = time.monotonic()
 
-    for node in nodes:
-        await sse_service.emit_event(run_id=run_id, event_type="node_started", node_name=node)
+    try:
+        await run_service.update_run_status(run_id, "running", current_node="starting")
 
-    result = await graph.ainvoke(initial_state, config)
+        result = await graph.ainvoke(initial_state, config)
 
-    for node in nodes:
-        await sse_service.emit_event(run_id=run_id, event_type="node_completed", node_name=node)
+        elapsed = time.monotonic() - start_time
+        logger.info("[CODEGEN] Graph execution completed in %.1fs", elapsed)
+
+    except Exception as e:
+        elapsed = time.monotonic() - start_time
+        logger.exception("[CODEGEN] Graph execution failed after %.1fs for run %s", elapsed, run_id)
+        await run_service.update_run_status(run_id, "failed", error=str(e))
+        return
 
     current_phase = result.get("current_phase", "unknown")
 
-    pending = await _get_pending_hitl_payload(graph, config)
+    try:
+        pending = await _get_pending_hitl_payload(graph, config)
+    except Exception as e:
+        logger.warning("Failed to check HITL payload: %s", e)
+        pending = None
+
     if pending:
         await sse_service.emit_event(
             run_id=run_id,
