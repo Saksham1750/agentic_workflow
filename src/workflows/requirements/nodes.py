@@ -1,16 +1,21 @@
 import uuid
+import json
 import logging
 
 from sqlalchemy import select
 
+from src.config import get_settings
 from src.models.document import Document
 from src.database import async_session_factory
 from src.services.embedding_service import embedding_service
 from src.services.rag_service import rag_service
+from src.observability.tracing import traced_node
 
 logger = logging.getLogger(__name__)
+settings = get_settings()
 
 
+@traced_node("document_ingestion")
 async def document_ingestion_node(state: dict) -> dict:
     project_id = state["project_id"]
 
@@ -37,34 +42,98 @@ async def document_ingestion_node(state: dict) -> dict:
     }
 
 
+@traced_node("gap_analysis")
 async def gap_analysis_node(state: dict) -> dict:
     documents = state.get("documents", [])
     feedback = state.get("feedback")
+    project_id = state.get("project_id", "")
 
-    doc_summaries = []
-    for doc in documents:
-        sections = doc.get("sections", [])
-        content_preview = "\n".join(s.get("content", "")[:500] for s in sections[:3])
-        doc_summaries.append(f"Document: {doc['filename']} ({doc['section_count']} sections)\n{content_preview}")
+    if not documents:
+        gaps_identified = ["No input documents provided. Need BRD/PRD/TRD to proceed."]
+        if feedback:
+            gaps_identified.append(f"Incorporating reviewer feedback: {feedback}")
+        return {
+            "clarifications": [{"gap_id": str(uuid.uuid4()), "gaps": gaps_identified}],
+            "current_phase": "gap_analysis",
+        }
 
-    document_context = "\n\n".join(doc_summaries) if doc_summaries else "No documents loaded."
-
-    if feedback:
-        document_context += f"\n\nPrevious feedback from reviewer:\n{feedback}"
+    GAP_CATEGORIES = [
+        {
+            "id": "functional_requirements",
+            "name": "Functional Requirements",
+            "query": "functional requirements user stories features capabilities what the system should do",
+            "threshold": 0.8,
+        },
+        {
+            "id": "non_functional_requirements",
+            "name": "Non-Functional Requirements",
+            "query": "non-functional requirements performance security scalability availability reliability",
+            "threshold": 0.8,
+        },
+        {
+            "id": "user_personas",
+            "name": "User Personas / Roles",
+            "query": "user personas roles actors stakeholders target users who will use the system",
+            "threshold": 0.75,
+        },
+        {
+            "id": "deployment",
+            "name": "Deployment & Infrastructure",
+            "query": "deployment infrastructure hosting environment production setup devops",
+            "threshold": 0.75,
+        },
+        {
+            "id": "integration",
+            "name": "Integration Points & External Dependencies",
+            "query": "integration API external services third-party dependencies microservices",
+            "threshold": 0.75,
+        },
+        {
+            "id": "acceptance_criteria",
+            "name": "Acceptance Criteria & Success Metrics",
+            "query": "acceptance criteria success metrics definition of done testing validation",
+            "threshold": 0.8,
+        },
+    ]
 
     gaps_identified = []
-    if not documents:
-        gaps_identified.append("No input documents provided. Need BRD/PRD/TRD to proceed.")
-    else:
-        gaps_identified.extend([
-            "Verify non-functional requirements (performance, security, scalability).",
-            "Confirm acceptance criteria for each requirement.",
-            "Validate integration points and external dependencies.",
-            "Clarify deployment and environment requirements.",
-        ])
+
+    for category in GAP_CATEGORIES:
+        try:
+            results = await embedding_service.query(
+                project_id=project_id,
+                query_text=category["query"],
+                n_results=1,
+            )
+            if results:
+                best_distance = results[0]["score"]
+                if best_distance > category["threshold"]:
+                    gaps_identified.append(
+                        f"{category['name']} — appears to be missing or insufficiently covered in the uploaded documents "
+                        f"(best match distance: {best_distance:.2f}, threshold: {category['threshold']})"
+                    )
+            else:
+                gaps_identified.append(
+                    f"{category['name']} — no matching content found in uploaded documents"
+                )
+        except Exception as e:
+            logger.warning(
+                "Vector search failed for gap category '%s': %s. Assuming gap exists.",
+                category["id"],
+                e,
+            )
+            gaps_identified.append(
+                f"{category['name']} — could not verify coverage (search failed)"
+            )
 
     if feedback:
         gaps_identified.append(f"Incorporating reviewer feedback: {feedback}")
+
+    if not gaps_identified:
+        gaps_identified.append(
+            "All key sections (requirements, personas, deployment, integrations, "
+            "acceptance criteria) appear to be covered in the uploaded documents."
+        )
 
     return {
         "clarifications": [{"gap_id": str(uuid.uuid4()), "gaps": gaps_identified}],
@@ -72,6 +141,75 @@ async def gap_analysis_node(state: dict) -> dict:
     }
 
 
+CLARIFICATION_SYSTEM_PROMPT = """You are a Requirements Analyst for a software project.
+
+Your role is to convert raw gap-analysis findings into clear, natural clarification questions for the project owner.
+
+## Instructions:
+1. Read the list of gaps and the document section titles provided
+2. For each gap, write a concise, professional question that a non-technical stakeholder can understand
+3. Reference what IS already in the documents where relevant (e.g., "Your BRD mentions X, but doesn't specify Y...")
+4. Do NOT expose internal scoring details, thresholds, or technical metadata
+5. Each question should be self-contained — the reader should not need other context
+6. If all gaps are covered, return an empty questions list
+
+## Output Format (JSON):
+{
+  "questions": [
+    {
+      "question": "Natural language question text",
+      "context": "Brief context about why this matters for the project"
+    }
+  ]
+}
+"""
+
+
+def _generate_questions_without_llm(gaps: list[str]) -> list[dict]:
+    friendly_names = {
+        "Functional Requirements": "functional requirements (features and capabilities)",
+        "Non-Functional Requirements": "non-functional requirements (performance, security, scalability)",
+        "User Personas / Roles": "target user personas and roles",
+        "Deployment & Infrastructure": "deployment and infrastructure details",
+        "Integration Points & External Dependencies": "integration points with external services",
+        "Acceptance Criteria & Success Metrics": "acceptance criteria and success metrics",
+    }
+
+    questions = []
+    for gap in gaps:
+        category_name = gap.split("—")[0].strip() if "—" in gap else gap.split(":")[0].strip()
+        friendly = friendly_names.get(category_name, category_name.lower())
+
+        if "no input documents" in gap.lower():
+            questions.append({
+                "question": "No documents were uploaded. Please upload a BRD, PRD, or TRD before we can proceed with requirements gathering.",
+                "context": "Documents are needed to extract and validate requirements.",
+            })
+        elif "no matching content" in gap or "could not verify" in gap:
+            questions.append({
+                "question": f"The uploaded documents don't appear to contain information about {friendly}. Could you provide details on this topic?",
+                "context": f"This section was not found in the uploaded documents.",
+            })
+        elif "missing or insufficiently" in gap or "insufficiently covered" in gap:
+            questions.append({
+                "question": f"The {friendly} section in your documents appears thin or incomplete. Could you expand on this or confirm the details?",
+                "context": f"Some content was found but it may not be detailed enough for downstream planning.",
+            })
+        elif "Incorporating reviewer feedback" in gap:
+            questions.append({
+                "question": f"Additional feedback received: {gap.split(':', 1)[-1].strip() if ':' in gap else gap}. Please address this.",
+                "context": "This feedback was raised during a previous review cycle.",
+            })
+        else:
+            questions.append({
+                "question": f"Please clarify or expand on: {friendly}",
+                "context": "This was flagged during document analysis.",
+            })
+
+    return questions
+
+
+@traced_node("clarification_generator")
 async def clarification_generator_node(state: dict) -> dict:
     from langgraph.types import interrupt
 
@@ -91,14 +229,73 @@ async def clarification_generator_node(state: dict) -> dict:
     if not all_gaps:
         return {"current_phase": "no_clarifications_needed"}
 
+    documents = state.get("documents", [])
+    section_titles = []
+    for doc in documents:
+        for section in doc.get("sections", []):
+            section_titles.append(section.get("title", ""))
+
+    questions_data = None
+
+    if settings.GROQ_API_KEY:
+        try:
+            from langchain_groq import ChatGroq
+            from langchain_core.messages import HumanMessage, SystemMessage
+            from src.observability.token_callback import TokenTrackingCallback
+
+            llm = ChatGroq(
+                model=settings.LLM_MODEL,
+                api_key=settings.GROQ_API_KEY,
+                temperature=0.3,
+            )
+
+            gaps_text = "\n".join(f"- {g}" for g in all_gaps[:5])
+            titles_text = ", ".join(section_titles[:30]) if section_titles else "No section titles available"
+
+            user_message = f"""## Gaps Identified
+{gaps_text}
+
+## Document Section Titles Found
+{titles_text}
+
+## Task
+Convert these gaps into natural clarification questions. Return JSON only."""
+
+            run_id = state.get("run_id", "")
+            project_id = state.get("project_id", "")
+            callback = TokenTrackingCallback(run_id, project_id, "clarification_generator") if run_id and project_id else None
+            config = {"callbacks": [callback]} if callback else {}
+
+            response = await llm.ainvoke([
+                SystemMessage(content=CLARIFICATION_SYSTEM_PROMPT),
+                HumanMessage(content=user_message),
+            ], config=config)
+
+            content = response.content
+            if "```json" in content:
+                content = content.split("```json")[1].split("```")[0]
+            elif "```" in content:
+                content = content.split("```")[1].split("```")[0]
+
+            questions_data = json.loads(content.strip())
+        except Exception as e:
+            logger.warning("LLM question generation failed, using template fallback: %s", e)
+            questions_data = None
+
+    if not questions_data:
+        questions_data = {"questions": _generate_questions_without_llm(all_gaps[:5])}
+
     questions = []
-    for i, gap in enumerate(all_gaps[:5]):
+    for q in questions_data.get("questions", []):
         questions.append({
             "question_id": str(uuid.uuid4()),
-            "question": f"Please clarify: {gap}",
-            "context": "This was identified during gap analysis of the uploaded documents.",
+            "question": q.get("question", "Please clarify the identified gap."),
+            "context": q.get("context", "This was identified during gap analysis of the uploaded documents."),
             "options": None,
         })
+
+    if not questions:
+        return {"current_phase": "no_clarifications_needed"}
 
     answer = interrupt({
         "type": "clarification_request",
@@ -114,6 +311,7 @@ async def clarification_generator_node(state: dict) -> dict:
     }
 
 
+@traced_node("requirements_synthesizer")
 async def requirements_synthesizer_node(state: dict) -> dict:
     documents = state.get("documents", [])
     clarifications = state.get("clarifications", [])
@@ -172,6 +370,7 @@ async def requirements_synthesizer_node(state: dict) -> dict:
     }
 
 
+@traced_node("validation")
 async def validation_node(state: dict) -> dict:
     from langgraph.types import interrupt
 

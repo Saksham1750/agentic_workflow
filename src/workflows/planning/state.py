@@ -27,6 +27,4 @@ class PlanningState(TypedDict):
     max_iterations: int
     feedback: str | None
     error: str | None
-
-    complexity: str | None
     approval_result: dict | None

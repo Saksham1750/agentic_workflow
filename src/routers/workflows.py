@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends
+from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.database import get_db
@@ -24,12 +25,12 @@ async def list_workflows(user_id: str = Depends(get_current_user)):
                 "status": "available",
                 "phases": [
                     "load_requirements",
-                    "complexity_routing",
                     "pattern_selection",
                     "research",
                     "architecture",
                     "planning",
                     "validation",
+                    "save_artifacts",
                     "approval",
                 ],
             },
@@ -47,6 +48,23 @@ async def list_workflows(user_id: str = Depends(get_current_user)):
             },
         ]
     }
+
+
+async def _build_workflow_graph(workflow_name: str):
+    from src.workflows.checkpointer import get_checkpointer
+
+    checkpointer = await get_checkpointer()
+
+    if workflow_name == "requirements":
+        from src.workflows.requirements.graph import build_requirements_graph
+        return await build_requirements_graph(checkpointer=checkpointer)
+    elif workflow_name == "planning":
+        from src.workflows.planning.graph import build_planning_graph
+        return await build_planning_graph(checkpointer=checkpointer)
+    elif workflow_name == "codegen":
+        from src.workflows.codegen.graph import build_codegen_graph
+        return await build_codegen_graph(checkpointer=checkpointer)
+    return None
 
 
 @router.get("/workflows/{workflow_name}/graph")
@@ -80,34 +98,30 @@ async def get_workflow_graph(
             "name": "planning",
             "nodes": [
                 "load_requirements",
-                "complexity_router",
                 "pattern_selection",
                 "research",
                 "architecture",
-                "lightweight_planning",
-                "full_planning",
+                "planning",
                 "validation",
+                "save_artifacts",
                 "approval",
             ],
             "edges": [
                 ("START", "load_requirements"),
-                ("load_requirements", "complexity_router"),
-                ("complexity_router", "pattern_selection"),
+                ("load_requirements", "pattern_selection"),
                 ("pattern_selection", "research"),
                 ("research", "architecture"),
-                ("architecture", "lightweight_planning"),
-                ("architecture", "full_planning"),
-                ("lightweight_planning", "validation"),
-                ("full_planning", "validation"),
-                ("validation", "approval"),
-                ("validation", "full_planning"),
+                ("architecture", "planning"),
+                ("planning", "validation"),
+                ("validation", "save_artifacts"),
+                ("validation", "planning"),
+                ("save_artifacts", "approval"),
                 ("approval", "END"),
-                ("approval", "full_planning"),
+                ("approval", "planning"),
             ],
             "interrupt_before": ["approval"],
             "subgraphs": {
                 "research": ["doc_rag", "kb_rag", "web_search", "merge"],
-                "planner_critic": ["planner", "critic"],
             },
         }
     elif workflow_name == "codegen":
@@ -136,3 +150,39 @@ async def get_workflow_graph(
             },
         }
     return {"error": "Unknown workflow"}
+
+
+@router.get("/workflows/{workflow_name}/graph.png")
+async def get_workflow_graph_png(
+    workflow_name: str,
+    user_id: str = Depends(get_current_user),
+):
+    graph = await _build_workflow_graph(workflow_name)
+    if not graph:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail=f"Unknown workflow: {workflow_name}")
+
+    try:
+        png_bytes = graph.get_graph().draw_mermaid_png()
+        return Response(content=png_bytes, media_type="image/png")
+    except Exception as e:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=500, detail=f"Failed to render graph: {e}")
+
+
+@router.get("/workflows/{workflow_name}/graph.mermaid")
+async def get_workflow_graph_mermaid(
+    workflow_name: str,
+    user_id: str = Depends(get_current_user),
+):
+    graph = await _build_workflow_graph(workflow_name)
+    if not graph:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail=f"Unknown workflow: {workflow_name}")
+
+    try:
+        mermaid_text = graph.get_graph().draw_mermaid()
+        return Response(content=mermaid_text, media_type="text/plain")
+    except Exception as e:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=500, detail=f"Failed to render mermaid: {e}")

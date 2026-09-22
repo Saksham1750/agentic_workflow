@@ -15,7 +15,7 @@ Your role is to validate the task plan against requirements and quality criteria
 ## Validation Criteria:
 1. **Coverage**: Every requirement maps to at least one task
 2. **Ordering**: No task depends on a task that comes after it
-3. **Pattern Fidelity**: Selected patterns are reflected in task descriptions
+3. **Pattern Fidelity**: If patterns are selected, they are reflected in task descriptions. If no patterns are selected, this check is skipped.
 4. **Atomicity**: Each task is implementable independently
 
 ## Output Format (JSON):
@@ -49,9 +49,11 @@ class CriticAgent:
         tasks = state.get("tasks", [])
         requirements_json = state.get("requirements_json", {})
         selected_patterns = state.get("selected_patterns", [])
+        run_id = state.get("run_id", "")
+        project_id = state.get("project_id", "")
 
         if self.llm:
-            result = await self._validate_with_llm(tasks, requirements_json, selected_patterns)
+            result = await self._validate_with_llm(tasks, requirements_json, selected_patterns, run_id=run_id, project_id=project_id)
         else:
             result = self._validate_without_llm(tasks, requirements_json, selected_patterns)
 
@@ -65,6 +67,8 @@ class CriticAgent:
         tasks: list[dict],
         requirements_json: dict,
         selected_patterns: list[dict],
+        run_id: str = "",
+        project_id: str = "",
     ) -> dict:
         user_message = f"""## Task Plan
 {json.dumps(tasks, indent=2)[:3000]}
@@ -79,10 +83,13 @@ class CriticAgent:
 Validate this plan. Return JSON with validation results."""
 
         try:
+            from src.observability.token_callback import TokenTrackingCallback
+            callback = TokenTrackingCallback(run_id, project_id, "critic") if run_id and project_id else None
+            config = {"callbacks": [callback]} if callback else {}
             response = await self.llm.ainvoke([
                 SystemMessage(content=CRITIC_SYSTEM_PROMPT),
                 HumanMessage(content=user_message),
-            ])
+            ], config=config)
 
             content = response.content
             if "```json" in content:
@@ -127,9 +134,10 @@ Validate this plan. Return JSON with validation results."""
                     ordering_issues.append(f"Task {task.get('task_id')} depends on {dep} which comes after it")
 
         pattern_issues = []
-        tasks_with_patterns = [t for t in tasks if t.get("pattern_refs")]
-        if selected_patterns and not tasks_with_patterns:
-            pattern_issues.append("No tasks reference any selected patterns")
+        if selected_patterns:
+            tasks_with_patterns = [t for t in tasks if t.get("pattern_refs")]
+            if not tasks_with_patterns:
+                pattern_issues.append("No tasks reference any selected patterns")
 
         atomicity_issues = []
         for task in tasks:

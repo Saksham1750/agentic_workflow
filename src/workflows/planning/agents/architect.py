@@ -73,10 +73,13 @@ class ArchitectAgent:
         requirements_json = state.get("requirements_json", {})
         selected_patterns = state.get("selected_patterns", [])
         research_findings = state.get("research_findings", [])
+        run_id = state.get("run_id", "")
+        project_id = state.get("project_id", "")
 
         if self.llm:
             result = await self._design_with_llm(
-                requirements_md, requirements_json, selected_patterns, research_findings
+                requirements_md, requirements_json, selected_patterns, research_findings,
+                run_id=run_id, project_id=project_id,
             )
         else:
             result = self._design_without_llm(
@@ -95,6 +98,8 @@ class ArchitectAgent:
         requirements_json: dict,
         selected_patterns: list[dict],
         research_findings: list[dict],
+        run_id: str = "",
+        project_id: str = "",
     ) -> dict:
         patterns_text = "\n".join([
             f"- {p.get('name', 'Unknown')}: {p.get('rationale', '')}" for p in selected_patterns
@@ -118,10 +123,13 @@ class ArchitectAgent:
 Design the system architecture. Return JSON with architecture_md and architecture_json fields."""
 
         try:
+            from src.observability.token_callback import TokenTrackingCallback
+            callback = TokenTrackingCallback(run_id, project_id, "architect") if run_id and project_id else None
+            config = {"callbacks": [callback]} if callback else {}
             response = await self.llm.ainvoke([
                 SystemMessage(content=ARCHITECT_SYSTEM_PROMPT),
                 HumanMessage(content=user_message),
-            ])
+            ], config=config)
 
             content = response.content
             if "```json" in content:

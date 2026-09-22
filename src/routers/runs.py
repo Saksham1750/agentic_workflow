@@ -17,6 +17,7 @@ from src.services.run_service import run_service
 from src.services.sse_service import sse_service
 from src.services.artifact_service import artifact_service
 from src.services.lifecycle_service import initialize_checkpointer
+from src.observability.tracing import set_sse_service, clear_sse_service
 from langgraph.types import Command
 
 router = APIRouter(tags=["runs"])
@@ -69,6 +70,9 @@ async def trigger_workflow(
 
 async def _execute_workflow(run_id: str, project_id: str, workflow_type: str, thread_id: str):
     try:
+        from src.observability.context import set_observability_context
+        set_observability_context(run_id=run_id, project_id=project_id, node_name="starting")
+
         await run_service.update_run_status(run_id, "running", current_node="starting")
 
         if workflow_type == "requirements":
@@ -85,6 +89,12 @@ async def _execute_workflow(run_id: str, project_id: str, workflow_type: str, th
     except Exception as e:
         logger.exception("Workflow %s failed for run %s", workflow_type, run_id)
         await run_service.update_run_status(run_id, "failed", error=str(e))
+    finally:
+        try:
+            from src.services.report_service import report_service
+            await report_service.generate_report(run_id, project_id)
+        except Exception as report_err:
+            logger.warning("Report generation failed for run %s: %s", run_id, report_err)
 
 
 async def _execute_requirements_workflow(run_id: str, project_id: str, thread_id: str):
@@ -113,7 +123,11 @@ async def _execute_requirements_workflow(run_id: str, project_id: str, thread_id
 
     await sse_service.emit_event(run_id=run_id, event_type="node_started", node_name="document_ingestion")
 
-    result = await graph.ainvoke(initial_state, config)
+    set_sse_service(sse_service)
+    try:
+        result = await graph.ainvoke(initial_state, config)
+    finally:
+        clear_sse_service()
 
     current_node = result.get("current_phase", "unknown")
     await run_service.update_run_status(run_id, "running", current_node=current_node)
@@ -179,7 +193,6 @@ async def _execute_planning_workflow(run_id: str, project_id: str, thread_id: st
         "max_iterations": 3,
         "feedback": None,
         "error": None,
-        "complexity": None,
         "approval_result": None,
     }
 
@@ -188,7 +201,11 @@ async def _execute_planning_workflow(run_id: str, project_id: str, thread_id: st
     try:
         await run_service.update_run_status(run_id, "running", current_node="starting")
 
-        result = await graph.ainvoke(initial_state, config)
+        set_sse_service(sse_service)
+        try:
+            result = await graph.ainvoke(initial_state, config)
+        finally:
+            clear_sse_service()
 
         elapsed = time.monotonic() - start_time
         logger.info("[PLANNING] Graph execution completed in %.1fs", elapsed)
@@ -280,7 +297,11 @@ async def _execute_codegen_workflow(run_id: str, project_id: str, thread_id: str
     try:
         await run_service.update_run_status(run_id, "running", current_node="starting")
 
-        result = await graph.ainvoke(initial_state, config)
+        set_sse_service(sse_service)
+        try:
+            result = await graph.ainvoke(initial_state, config)
+        finally:
+            clear_sse_service()
 
         elapsed = time.monotonic() - start_time
         logger.info("[CODEGEN] Graph execution completed in %.1fs", elapsed)

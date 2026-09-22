@@ -13,10 +13,10 @@ WORKFLOW_REVIEWER_PROMPT = """You are a Workflow Reviewer agent for an AI Agent 
 Your role is to validate that generated code correctly implements the selected agentic design patterns.
 
 ## Validation Criteria:
-1. Agent orchestration matches the selected patterns
-2. State management follows pattern requirements
-3. Tool integration is correct for the pattern type
-4. Error handling aligns with pattern expectations
+1. Agent orchestration matches the selected patterns (skip if no patterns selected)
+2. State management follows project requirements
+3. Tool integration is correct for the project type
+4. Error handling aligns with requirements
 
 ## Output Format (JSON):
 {
@@ -79,25 +79,28 @@ class ReviewerAgents:
                 max_retries=2,
             )
 
-    async def review_workflow(self, files: list[dict], patterns: list[dict], task: dict) -> dict:
+    async def review_workflow(self, files: list[dict], patterns: list[dict], task: dict, run_id: str = "", project_id: str = "") -> dict:
         return await self._review(
             WORKFLOW_REVIEWER_PROMPT, "workflow_reviewer",
             files, patterns, task,
             "Check that agent orchestration matches selected patterns",
+            run_id=run_id, project_id=project_id,
         )
 
-    async def review_prompt(self, files: list[dict], patterns: list[dict], task: dict) -> dict:
+    async def review_prompt(self, files: list[dict], patterns: list[dict], task: dict, run_id: str = "", project_id: str = "") -> dict:
         return await self._review(
             PROMPT_REVIEWER_PROMPT, "prompt_reviewer",
             files, patterns, task,
             "Check prompt clarity, role definitions, and injection resistance",
+            run_id=run_id, project_id=project_id,
         )
 
-    async def review_security(self, files: list[dict], patterns: list[dict], task: dict) -> dict:
+    async def review_security(self, files: list[dict], patterns: list[dict], task: dict, run_id: str = "", project_id: str = "") -> dict:
         return await self._review(
             SECURITY_REVIEWER_PROMPT, "security_reviewer",
             files, patterns, task,
             "Check OWASP basics: input validation, secrets, error handling",
+            run_id=run_id, project_id=project_id,
         )
 
     async def _review(
@@ -108,10 +111,13 @@ class ReviewerAgents:
         patterns: list[dict],
         task: dict,
         focus: str,
+        run_id: str = "",
+        project_id: str = "",
     ) -> dict:
         if self.llm:
             return await self._review_with_llm(
                 system_prompt, files, patterns, task, focus,
+                run_id=run_id, project_id=project_id,
             )
         return self._review_without_llm(files, task, reviewer_name)
 
@@ -122,6 +128,8 @@ class ReviewerAgents:
         patterns: list[dict],
         task: dict,
         focus: str,
+        run_id: str = "",
+        project_id: str = "",
     ) -> dict:
         files_text = "\n\n".join([
             f"### {f['path']}\n```python\n{f['content'][:2000]}\n```"
@@ -131,7 +139,7 @@ class ReviewerAgents:
         patterns_text = "\n".join([
             f"- {p.get('name', 'Unknown')}: {p.get('rationale', '')}"
             for p in patterns
-        ])
+        ]) if patterns else "None — this is a non-agentic project, standard code review applies"
 
         user_message = f"""## Generated Code
 {files_text}
@@ -149,10 +157,13 @@ Description: {task.get('description', '')}
 Return JSON with verdict, score, issues, and feedback."""
 
         try:
+            from src.observability.token_callback import TokenTrackingCallback
+            callback = TokenTrackingCallback(run_id, project_id, f"reviewer_{focus}") if run_id and project_id else None
+            config = {"callbacks": [callback]} if callback else {}
             response = await self.llm.ainvoke([
                 SystemMessage(content=system_prompt),
                 HumanMessage(content=user_message),
-            ])
+            ], config=config)
 
             content = response.content
             if "```json" in content:

@@ -8,7 +8,6 @@ from src.workflows.planning.agents.researcher import ResearcherAgent
 from src.workflows.planning.agents.architect import ArchitectAgent
 from src.workflows.planning.agents.planner import PlannerAgent
 from src.workflows.planning.agents.critic import CriticAgent
-from src.workflows.planning.nodes.router import complexity_router, route_by_complexity
 
 
 class TestPlanningState:
@@ -21,7 +20,7 @@ class TestPlanningState:
             "architecture_md", "architecture_json",
             "tasks", "task_validation",
             "current_phase", "iteration_count", "max_iterations",
-            "feedback", "error", "complexity", "approval_result",
+            "feedback", "error", "approval_result",
         ]
         for field in required_fields:
             assert field in PlanningState.__annotations__
@@ -184,62 +183,6 @@ class TestCriticAgent:
         assert result["current_phase"] == "validation_complete"
         assert "valid" in result["task_validation"]
         assert "score" in result["task_validation"]
-
-
-class TestRouterNode:
-    @pytest.mark.asyncio
-    async def test_complexity_router_lightweight(self):
-        state = {
-            "requirements_json": {
-                "functional_requirements": [{"id": "FR-001", "title": "Simple"}],
-                "non_functional_requirements": [],
-            },
-            "selected_patterns": [],
-        }
-
-        result = await complexity_router(state)
-
-        assert "complexity" in result
-        assert result["complexity"] == "lightweight"
-        assert result["current_phase"] == "routed"
-
-    @pytest.mark.asyncio
-    async def test_complexity_router_heavyweight(self):
-        state = {
-            "requirements_json": {
-                "functional_requirements": [
-                    {"id": f"FR-{i:03d}", "title": f"Feature {i}", "content": "complex integration"}
-                    for i in range(10)
-                ],
-                "non_functional_requirements": [
-                    {"id": f"NFR-{i:03d}", "title": f"NFR {i}"}
-                    for i in range(5)
-                ],
-            },
-            "selected_patterns": [
-                {"name": "Pattern1"},
-                {"name": "Pattern2"},
-                {"name": "Pattern3"},
-                {"name": "Pattern4"},
-                {"name": "Pattern5"},
-            ],
-        }
-
-        result = await complexity_router(state)
-
-        assert result["complexity"] == "heavyweight"
-
-    def test_route_by_complexity_lightweight(self):
-        state = {"complexity": "lightweight"}
-        assert route_by_complexity(state) == "lightweight_path"
-
-    def test_route_by_complexity_standard(self):
-        state = {"complexity": "standard"}
-        assert route_by_complexity(state) == "full_path"
-
-    def test_route_by_complexity_heavyweight(self):
-        state = {"complexity": "heavyweight"}
-        assert route_by_complexity(state) == "full_path"
 
 
 class TestGraphBuilding:

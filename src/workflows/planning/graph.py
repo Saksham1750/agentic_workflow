@@ -8,11 +8,12 @@ from src.workflows.planning.agents.researcher import researcher_agent
 from src.workflows.planning.agents.architect import architect_agent
 from src.workflows.planning.agents.planner import planner_agent
 from src.workflows.planning.agents.critic import critic_agent
-from src.workflows.planning.nodes.router import complexity_router, route_by_complexity
+from src.observability.tracing import traced_node
 
 logger = logging.getLogger(__name__)
 
 
+@traced_node("load_requirements")
 async def load_requirements_node(state: dict) -> dict:
     import asyncio
     from src.services.artifact_service import artifact_service
@@ -66,6 +67,7 @@ async def load_requirements_node(state: dict) -> dict:
     }
 
 
+@traced_node("pattern_selection")
 async def pattern_selection_node(state: dict) -> dict:
     from src.services.run_service import run_service
     run_id = state.get("run_id", "")
@@ -76,6 +78,7 @@ async def pattern_selection_node(state: dict) -> dict:
     return await pattern_selector_agent.select_patterns(state)
 
 
+@traced_node("research")
 async def research_node(state: dict) -> dict:
     from src.services.run_service import run_service
     run_id = state.get("run_id", "")
@@ -86,6 +89,7 @@ async def research_node(state: dict) -> dict:
     return await researcher_agent.research(state)
 
 
+@traced_node("architecture")
 async def architecture_node(state: dict) -> dict:
     from src.services.run_service import run_service
     run_id = state.get("run_id", "")
@@ -96,27 +100,18 @@ async def architecture_node(state: dict) -> dict:
     return await architect_agent.design_architecture(state)
 
 
-async def lightweight_planning_node(state: dict) -> dict:
+@traced_node("planning")
+async def planning_node(state: dict) -> dict:
     from src.services.run_service import run_service
     run_id = state.get("run_id", "")
     try:
-        await run_service.update_run_status(run_id, "running", current_node="lightweight_planning")
+        await run_service.update_run_status(run_id, "running", current_node="planning")
     except Exception:
         pass
     return await planner_agent.create_task_plan(state)
 
 
-async def full_planning_node(state: dict) -> dict:
-    from src.services.run_service import run_service
-    run_id = state.get("run_id", "")
-    try:
-        await run_service.update_run_status(run_id, "running", current_node="full_planning")
-    except Exception:
-        pass
-    result = await planner_agent.create_task_plan(state)
-    return result
-
-
+@traced_node("validation")
 async def validation_node(state: dict) -> dict:
     from src.services.run_service import run_service
     run_id = state.get("run_id", "")
@@ -129,6 +124,7 @@ async def validation_node(state: dict) -> dict:
     return result
 
 
+@traced_node("approval")
 async def approval_node(state: dict) -> dict:
     from langgraph.types import interrupt
     from src.services.run_service import run_service
@@ -169,10 +165,10 @@ def route_after_validation(state: dict) -> str:
     max_iter = state.get("max_iterations", 3)
 
     if validation and validation.get("valid", False):
-        return "approval"
+        return "save_artifacts"
 
     if iteration >= max_iter:
-        return "approval"
+        return "save_artifacts"
 
     return "revise"
 
@@ -180,10 +176,11 @@ def route_after_validation(state: dict) -> str:
 def route_after_approval(state: dict) -> str:
     phase = state.get("current_phase", "")
     if phase == "rejected":
-        return "planner_critic"
+        return "planning"
     return END
 
 
+@traced_node("save_artifacts")
 async def save_artifacts_node(state: dict) -> dict:
     from src.services.artifact_service import artifact_service
 
@@ -211,40 +208,27 @@ async def build_planning_graph(checkpointer=None):
     graph = StateGraph(PlanningState)
 
     graph.add_node("load_requirements", load_requirements_node)
-    graph.add_node("complexity_router", complexity_router)
     graph.add_node("pattern_selection", pattern_selection_node)
     graph.add_node("research", research_node)
     graph.add_node("architecture", architecture_node)
-    graph.add_node("lightweight_planning", lightweight_planning_node)
-    graph.add_node("full_planning", full_planning_node)
+    graph.add_node("planning", planning_node)
     graph.add_node("validation", validation_node)
     graph.add_node("save_artifacts", save_artifacts_node)
     graph.add_node("approval", approval_node)
 
     graph.add_edge(START, "load_requirements")
-    graph.add_edge("load_requirements", "complexity_router")
-    graph.add_edge("complexity_router", "pattern_selection")
+    graph.add_edge("load_requirements", "pattern_selection")
     graph.add_edge("pattern_selection", "research")
     graph.add_edge("research", "architecture")
-
-    graph.add_conditional_edges(
-        "architecture",
-        route_by_complexity,
-        {
-            "lightweight_path": "lightweight_planning",
-            "full_path": "full_planning",
-        },
-    )
-
-    graph.add_edge("lightweight_planning", "validation")
-    graph.add_edge("full_planning", "validation")
+    graph.add_edge("architecture", "planning")
+    graph.add_edge("planning", "validation")
 
     graph.add_conditional_edges(
         "validation",
         route_after_validation,
         {
-            "approval": "save_artifacts",
-            "revise": "full_planning",
+            "save_artifacts": "save_artifacts",
+            "revise": "planning",
         },
     )
 
@@ -254,7 +238,7 @@ async def build_planning_graph(checkpointer=None):
         "approval",
         route_after_approval,
         {
-            "planner_critic": "full_planning",
+            "planning": "planning",
             END: END,
         },
     )

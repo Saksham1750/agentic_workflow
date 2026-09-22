@@ -68,6 +68,7 @@ class ResearcherAgent:
         project_id = state.get("project_id", "")
         requirements_json = state.get("requirements_json", {})
         selected_patterns = state.get("selected_patterns", [])
+        run_id = state.get("run_id", "")
 
         doc_findings = await self._research_documents(project_id, requirements_json)
         kb_findings = await self._research_knowledge_base(requirements_json, selected_patterns)
@@ -76,7 +77,7 @@ class ResearcherAgent:
         all_findings = doc_findings + kb_findings + web_findings
 
         if self.llm:
-            synthesized = await self._synthesize_with_llm(all_findings, requirements_json)
+            synthesized = await self._synthesize_with_llm(all_findings, requirements_json, run_id=run_id, project_id=project_id)
         else:
             synthesized = self._synthesize_without_llm(all_findings)
 
@@ -181,6 +182,8 @@ class ResearcherAgent:
         self,
         findings: list[dict],
         requirements_json: dict,
+        run_id: str = "",
+        project_id: str = "",
     ) -> dict:
         findings_text = "\n\n".join([
             f"### {f['id']} [{f['source_type']}]\n{f['claim']}" for f in findings
@@ -197,10 +200,13 @@ class ResearcherAgent:
 Synthesize these findings into a coherent research summary. Ensure every claim has a citation. Return JSON only."""
 
         try:
+            from src.observability.token_callback import TokenTrackingCallback
+            callback = TokenTrackingCallback(run_id, project_id, "researcher") if run_id and project_id else None
+            config = {"callbacks": [callback]} if callback else {}
             response = await self.llm.ainvoke([
                 SystemMessage(content=RESEARCHER_SYSTEM_PROMPT),
                 HumanMessage(content=user_message),
-            ])
+            ], config=config)
 
             content = response.content
             if "```json" in content:

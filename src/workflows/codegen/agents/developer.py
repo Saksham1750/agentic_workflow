@@ -17,7 +17,7 @@ Your role is to generate PRODUCTION-READY, RUNNABLE Python code for a given task
 2. Use ONLY standard library + the dependencies listed in the requirements context
 3. All imports must reference packages that will be in requirements.txt
 4. Include proper error handling, type hints, docstrings, and logging
-5. Follow the referenced patterns' structure and prerequisites
+5. If pattern references are provided, follow their structure and prerequisites. If pattern references are empty or 'None', generate standard implementation code without agent abstractions.
 6. DO NOT generate placeholder/stub code — write REAL implementations
 7. Each file must be syntactically valid Python
 
@@ -95,10 +95,14 @@ class DeveloperAgent:
         review_feedback = state.get("review_feedback")
         existing_files = state.get("workspace_files") or []
 
+        run_id = state.get("run_id", "")
+        project_id = state.get("project_id", "")
+
         if self.llm:
             result = await self._generate_with_llm(
                 current_task, requirements_md, architecture_json,
                 selected_patterns, review_feedback, existing_files,
+                run_id=run_id, project_id=project_id,
             )
         else:
             result = self._generate_without_llm(
@@ -130,11 +134,16 @@ class DeveloperAgent:
         selected_patterns: list[dict],
         review_feedback: str | None,
         existing_files: list[dict],
+        run_id: str = "",
+        project_id: str = "",
     ) -> dict:
-        patterns_text = "\n".join([
-            f"- {p.get('name', 'Unknown')}: {p.get('rationale', '')}"
-            for p in selected_patterns
-        ])
+        patterns_section = ""
+        if selected_patterns:
+            patterns_text = "\n".join([
+                f"- {p.get('name', 'Unknown')}: {p.get('rationale', '')}"
+                for p in selected_patterns
+            ])
+            patterns_section = f"\n## SELECTED PATTERNS\n{patterns_text}\n"
 
         existing_files_section = ""
         if existing_files:
@@ -153,13 +162,10 @@ Description: {task.get('description', '')}
 Target Files: {', '.join(task.get('target_files', []))}
 Acceptance Criteria: {json.dumps(task.get('acceptance_criteria', []))}
 Dependencies (must complete first): {json.dumps(task.get('dependencies', []))}
-Pattern References: {json.dumps(task.get('pattern_refs', []))}
-
+Pattern References: {json.dumps(task.get('pattern_refs', [])) if task.get('pattern_refs') else 'None — generate standard implementation code'}
+{patterns_section}
 ## ARCHITECTURE
 {json.dumps(architecture_json, indent=2)[:3000]}
-
-## SELECTED PATTERNS
-{patterns_text}
 
 ## REQUIREMENTS
 {requirements_md[:3000]}
@@ -176,10 +182,13 @@ Generate COMPLETE, RUNNABLE Python code for this task. Every file must:
 Return JSON with the files array."""
 
         try:
+            from src.observability.token_callback import TokenTrackingCallback
+            callback = TokenTrackingCallback(run_id, project_id, "developer") if run_id and project_id else None
+            config = {"callbacks": [callback]} if callback else {}
             response = await self.llm.ainvoke([
                 SystemMessage(content=DEVELOPER_SYSTEM_PROMPT),
                 HumanMessage(content=user_message),
-            ])
+            ], config=config)
 
             content = response.content
             if "```json" in content:

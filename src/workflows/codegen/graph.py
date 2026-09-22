@@ -11,6 +11,7 @@ from src.workflows.codegen.state import CodegenState
 from src.workflows.codegen.agents.developer import developer_agent
 from src.workflows.codegen.agents.reviewers import reviewer_agents
 from src.workflows.codegen.subgraph_builder import build_task_subgraph
+from src.observability.tracing import traced_node
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +54,7 @@ IMPORT_TO_PACKAGE = {
 }
 
 
+@traced_node("load_artifacts")
 async def load_planning_artifacts_node(state: dict) -> dict:
     import asyncio
     from src.services.artifact_service import artifact_service
@@ -137,6 +139,7 @@ async def load_planning_artifacts_node(state: dict) -> dict:
     }
 
 
+@traced_node("execute_task")
 async def execute_task_node(state: dict) -> dict:
     from src.services.run_service import run_service
 
@@ -194,6 +197,7 @@ async def execute_task_node(state: dict) -> dict:
     }
 
 
+@traced_node("process_next")
 async def process_next_task_node(state: dict) -> dict:
     from src.services.run_service import run_service
 
@@ -463,6 +467,7 @@ if __name__ == "__main__":
 '''
 
 
+@traced_node("generate_scaffolding")
 async def generate_scaffolding_node(state: dict) -> dict:
     from src.services.run_service import run_service
     run_id = state.get("run_id", "")
@@ -491,6 +496,7 @@ async def generate_scaffolding_node(state: dict) -> dict:
     }
 
 
+@traced_node("bundle_and_save")
 async def bundle_and_save_node(state: dict) -> dict:
     from src.workflows.codegen.services.workspace_service import workspace_service
     from src.services.artifact_service import artifact_service
@@ -539,6 +545,7 @@ async def bundle_and_save_node(state: dict) -> dict:
     }
 
 
+@traced_node("approval")
 async def approval_node(state: dict) -> dict:
     from src.services.run_service import run_service
     run_id = state.get("run_id", "")

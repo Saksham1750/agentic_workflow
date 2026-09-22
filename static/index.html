@@ -123,6 +123,47 @@
   .upload-queue-item .status.done { background: rgba(0,184,148,0.15); color: var(--success); }
   .upload-queue-item .status.error { background: rgba(231,76,60,0.15); color: var(--danger); }
   .upload-queue-item .remove-btn { background: none; border: none; color: var(--danger); cursor: pointer; font-size: 16px; padding: 0 4px; }
+  .req-section { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 14px; margin-bottom: 12px; }
+  .req-section h4 { font-size: 14px; color: var(--accent); margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+  .req-section .req-count { background: rgba(108,92,231,0.15); color: var(--accent); font-size: 11px; padding: 2px 8px; border-radius: 10px; font-weight: 600; }
+  .req-item { background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; margin-bottom: 6px; }
+  .req-item .req-id { color: var(--accent); font-weight: 700; font-size: 12px; margin-right: 6px; }
+  .req-item .req-title { font-weight: 600; font-size: 13px; }
+  .req-item .req-source { font-size: 11px; color: var(--muted); margin-left: 6px; }
+  .req-item .req-content { font-size: 12px; color: var(--text); margin-top: 6px; white-space: pre-wrap; line-height: 1.5; max-height: 200px; overflow-y: auto; }
+
+  .state-timeline { margin-top: 16px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .state-timeline-header { padding: 10px 14px; background: rgba(108,92,231,0.08); font-size: 13px; font-weight: 600; color: var(--accent); display: flex; align-items: center; gap: 8px; }
+  .state-timeline-body { padding: 12px 14px; }
+  .timeline-node { display: flex; gap: 12px; position: relative; padding-bottom: 16px; }
+  .timeline-node:last-child { padding-bottom: 0; }
+  .timeline-node:last-child .node-line { display: none; }
+  .timeline-node .node-indicator { display: flex; flex-direction: column; align-items: center; flex-shrink: 0; width: 24px; }
+  .timeline-node .node-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--muted); border: 2px solid var(--border); flex-shrink: 0; z-index: 1; }
+  .timeline-node .node-dot.done { background: var(--success); border-color: var(--success); }
+  .timeline-node .node-dot.active { background: var(--warn); border-color: var(--warn); animation: pulse 1.5s infinite; }
+  .timeline-node .node-dot.error { background: var(--danger); border-color: var(--danger); }
+  .timeline-node .node-line { width: 2px; flex: 1; background: var(--border); margin-top: 2px; }
+  .timeline-node .node-line.done { background: var(--success); }
+  .timeline-node .node-content { flex: 1; min-width: 0; }
+  .timeline-node .node-name { font-size: 13px; font-weight: 600; color: var(--text); display: flex; align-items: center; gap: 8px; }
+  .timeline-node .node-name .node-label { color: var(--muted); font-size: 11px; font-weight: 400; }
+  .timeline-node .node-name .node-duration { color: var(--muted); font-size: 11px; margin-left: auto; }
+  .timeline-node .node-changed { font-size: 11px; color: var(--accent); margin-top: 2px; cursor: pointer; }
+  .timeline-node .node-changed:hover { text-decoration: underline; }
+  .state-diff { margin-top: 6px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; display: none; }
+  .state-diff.open { display: block; }
+  .state-diff-header { padding: 6px 10px; font-size: 11px; font-weight: 600; color: var(--muted); border-bottom: 1px solid var(--border); display: flex; gap: 12px; }
+  .state-diff-header span { cursor: pointer; padding: 2px 6px; border-radius: 4px; }
+  .state-diff-header span.active { color: var(--accent); background: rgba(108,92,231,0.1); }
+  .state-diff-body { padding: 8px 10px; max-height: 250px; overflow-y: auto; }
+  .state-diff-row { display: flex; gap: 8px; padding: 3px 0; font-size: 11px; font-family: 'Cascadia Code', 'Fira Code', monospace; }
+  .state-diff-row .diff-key { color: var(--accent); font-weight: 600; min-width: 120px; flex-shrink: 0; }
+  .state-diff-row .diff-val { color: var(--text); word-break: break-all; }
+  .state-diff-row .diff-val.before { color: var(--muted); }
+  .state-diff-row .diff-val.after { color: var(--success); }
+  .state-diff-row .diff-val.added { color: var(--success); }
+  .state-diff-row .diff-val.removed { color: var(--danger); text-decoration: line-through; }
 </style>
 </head>
 <body>
@@ -218,6 +259,10 @@
           <button class="btn btn-primary" onclick="doPollRunStatus()" id="btnPollRun" disabled>Poll Status</button>
         </div>
         <div class="output" id="wf1Output"></div>
+        <div class="state-timeline hidden" id="timelineWf1">
+          <div class="state-timeline-header">&#9654; Agent State Timeline</div>
+          <div class="state-timeline-body" id="timelineWf1Body"></div>
+        </div>
       </div>
     </div>
 
@@ -246,7 +291,14 @@
         <span class="step-status pending" id="step6status">pending</span>
       </div>
       <div class="step-body" id="step6body">
-        <p style="font-size:13px;color:var(--muted)">When run status = <span class="tag tag-ready">awaiting_human</span> at approval stage</p>
+        <p style="font-size:13px;color:var(--muted)">Review the gathered requirements below, then approve or provide feedback.</p>
+        <div class="btn-row" style="margin-top:0;margin-bottom:12px">
+          <button class="btn btn-primary" onclick="loadRequirementsPreview()" id="btnLoadReqPreview">Load Requirements Preview</button>
+        </div>
+        <div id="reqPreviewContainer">
+          <p style="color:var(--muted);font-size:13px">Click "Load Requirements Preview" to review gathered requirements before approving.</p>
+        </div>
+        <hr class="divider">
         <label>Feedback (for rejection)</label>
         <textarea id="rejectFeedback" placeholder="Optional feedback if rejecting..."></textarea>
         <div class="btn-row">
@@ -306,6 +358,10 @@
           <button class="btn btn-primary" onclick="doPollPlanningStatus()" id="btnPollPlanning" disabled>Poll Status</button>
         </div>
         <div class="output" id="wf2Output"></div>
+        <div class="state-timeline hidden" id="timelineWf2">
+          <div class="state-timeline-header">&#9654; Agent State Timeline</div>
+          <div class="state-timeline-body" id="timelineWf2Body"></div>
+        </div>
       </div>
     </div>
 
@@ -448,6 +504,10 @@
           <button class="btn btn-primary" onclick="doPollCodegenStatus()" id="btnPollCodegen" disabled>Poll Status</button>
         </div>
         <div class="output" id="wf3Output"></div>
+        <div class="state-timeline hidden" id="timelineWf3">
+          <div class="state-timeline-header">&#9654; Agent State Timeline</div>
+          <div class="state-timeline-body" id="timelineWf3Body"></div>
+        </div>
       </div>
     </div>
 
@@ -558,9 +618,9 @@ let state = {
   documentId: null,
   docStatus: null,
   currentWorkflow: 'requirements',
-  wf1: { runId: null, runStatus: null, questions: null },
-  wf2: { runId: null, runStatus: null },
-  wf3: { runId: null, runStatus: null },
+  wf1: { runId: null, runStatus: null, questions: null, currentNode: null },
+  wf2: { runId: null, runStatus: null, currentNode: null },
+  wf3: { runId: null, runStatus: null, currentNode: null },
   planningArtifacts: null
 };
 
@@ -797,6 +857,9 @@ async function doTriggerRequirements() {
     document.getElementById('btnPollRun').disabled = false;
     document.getElementById('btnGetHitl').disabled = false;
     document.getElementById('btnFinal').disabled = false;
+    _nodeStates[r.id] = {};
+    startSSEConnection('requirements', r.id);
+    renderStateTimeline('requirements', 'document_ingestion');
   } catch (e) { showOutput('wf1Output', e, true); log('Trigger failed', 'err'); }
 }
 
@@ -808,6 +871,8 @@ async function doPollRunStatus() {
     state.wf1.runStatus = r.status;
     showOutput('wf1Output', r);
     log('Run status: ' + r.status + ' (node: ' + (r.current_node || 'n/a') + ')', r.status === 'completed' ? 'ok' : 'info');
+    state.wf1.currentNode = r.current_node;
+    renderStateTimeline('requirements', r.current_node);
 
     if (r.status === 'completed') {
       setStep(4, 'done');
@@ -823,6 +888,9 @@ async function doPollRunStatus() {
       if (r.current_node === 'synthesized' || r.current_node === 'validation') {
         document.getElementById('btnApprove').disabled = false;
         document.getElementById('btnReject').disabled = false;
+        document.getElementById('btnLoadReqPreview').disabled = false;
+        setStep(6, 'active');
+        loadRequirementsPreview();
       }
     } else if (r.status === 'failed') {
       setStep(4, 'error');
@@ -847,9 +915,11 @@ async function doGetPendingHitl() {
       if (r.current_node === 'synthesized' || r.current_node === 'validation') {
         document.getElementById('btnApprove').disabled = false;
         document.getElementById('btnReject').disabled = false;
+        document.getElementById('btnLoadReqPreview').disabled = false;
         setStep(5, 'done');
         document.getElementById('step5num').textContent = '\u2713';
         setStep(6, 'active');
+        loadRequirementsPreview();
       }
       return;
     }
@@ -889,6 +959,110 @@ async function doSubmitClarifications() {
     document.getElementById('btnSubmitClar').disabled = true;
     document.getElementById('btnPollRun').disabled = false;
   } catch (e) { showOutput('clarOutput', e, true); log('Submit clarifications failed', 'err'); }
+}
+
+async function loadRequirementsPreview() {
+  try {
+    if (!state.wf1.runId) { log('No active requirements run', 'err'); return; }
+    log('Loading requirements preview...');
+    const container = document.getElementById('reqPreviewContainer');
+    container.innerHTML = '<p style="color:var(--muted)">Loading requirements...</p>';
+
+    const fetchText = async (file) => {
+      try {
+        const res = await fetch(`${API}/projects/${state.projectId}/runs/${state.wf1.runId}/artifacts/${file}`, {
+          headers: { 'Authorization': 'Bearer ' + state.token }
+        });
+        return res.ok ? await res.text() : null;
+      } catch { return null; }
+    };
+    const fetchJson = async (file) => {
+      try { return await api('GET', `/projects/${state.projectId}/runs/${state.wf1.runId}/artifacts/${file}`); }
+      catch { return null; }
+    };
+
+    const [reqMd, reqJson] = await Promise.all([
+      fetchText('requirements.md'),
+      fetchJson('requirements.json'),
+    ]);
+
+    if (!reqMd && !reqJson) {
+      container.innerHTML = '<p style="color:var(--muted)">No requirements artifacts found yet. The workflow may still be processing.</p>';
+      log('No requirements artifacts available', 'err');
+      return;
+    }
+
+    let html = '';
+
+    if (reqJson) {
+      const frs = reqJson.functional_requirements || [];
+      const nfrs = reqJson.non_functional_requirements || [];
+      const personas = reqJson.personas || [];
+      const assumptions = reqJson.assumptions || [];
+      const dependencies = reqJson.dependencies || [];
+      const clarifications = reqJson.clarifications || [];
+
+      if (frs.length) {
+        html += `<div class="req-section">
+          <h4>Functional Requirements <span class="req-count">${frs.length}</span></h4>
+          ${frs.map(fr => `<div class="req-item">
+            <span class="req-id">${fr.id}</span><span class="req-title">${fr.title}</span><span class="req-source">${fr.source || ''}</span>
+            <div class="req-content">${fr.content || ''}</div>
+          </div>`).join('')}
+        </div>`;
+      }
+
+      if (nfrs.length) {
+        html += `<div class="req-section">
+          <h4>Non-Functional Requirements <span class="req-count">${nfrs.length}</span></h4>
+          ${nfrs.map(nfr => `<div class="req-item">
+            <span class="req-id">${nfr.id}</span><span class="req-title">${nfr.title}</span><span class="req-source">${nfr.source || ''}</span>
+            <div class="req-content">${nfr.content || ''}</div>
+          </div>`).join('')}
+        </div>`;
+      }
+
+      if (personas.length) {
+        html += `<div class="req-section">
+          <h4>User Personas <span class="req-count">${personas.length}</span></h4>
+          ${personas.map(p => `<div class="req-item">
+            <span class="req-title">${p.name || p.title || 'Persona'}</span>
+            <div class="req-content">${p.description || p.content || JSON.stringify(p, null, 2)}</div>
+          </div>`).join('')}
+        </div>`;
+      }
+
+      if (assumptions.length) {
+        html += `<div class="req-section">
+          <h4>Assumptions <span class="req-count">${assumptions.length}</span></h4>
+          ${assumptions.map(a => `<div class="req-item"><div class="req-content">${typeof a === 'string' ? a : a.description || JSON.stringify(a)}</div></div>`).join('')}
+        </div>`;
+      }
+
+      if (dependencies.length) {
+        html += `<div class="req-section">
+          <h4>Dependencies <span class="req-count">${dependencies.length}</span></h4>
+          ${dependencies.map(d => `<div class="req-item"><div class="req-content">${typeof d === 'string' ? d : d.description || JSON.stringify(d)}</div></div>`).join('')}
+        </div>`;
+      }
+
+      if (clarifications.length) {
+        html += `<div class="req-section">
+          <h4>Clarifications Applied</h4>
+          ${clarifications.map(c => `<div class="req-item">
+            <div class="req-content">${JSON.stringify(c, null, 2)}</div>
+          </div>`).join('')}
+        </div>`;
+      }
+    }
+
+    if (reqMd && !reqJson) {
+      html = `<div class="req-section"><h4>Requirements</h4><pre style="font-size:12px;white-space:pre-wrap;max-height:600px;overflow-y:auto">${reqMd}</pre></div>`;
+    }
+
+    container.innerHTML = html || '<p style="color:var(--muted)">No requirements to display.</p>';
+    log('Requirements preview loaded', 'ok');
+  } catch (e) { document.getElementById('reqPreviewContainer').innerHTML = `<p style="color:var(--danger)">Failed to load requirements preview</p>`; log('Load requirements preview failed', 'err'); }
 }
 
 async function doApproveRequirements() {
@@ -996,6 +1170,9 @@ async function doTriggerPlanning() {
     log('Planning workflow triggered, run_id: ' + r.id, 'ok');
     document.getElementById('btnPollPlanning').disabled = false;
     document.getElementById('btnPlanFinal').disabled = false;
+    _nodeStates[r.id] = {};
+    startSSEConnection('planning', r.id);
+    renderStateTimeline('planning', 'load_requirements');
   } catch (e) { showOutput('wf2Output', e, true); log('Trigger planning failed', 'err'); }
 }
 
@@ -1007,6 +1184,8 @@ async function doPollPlanningStatus() {
     state.wf2.runStatus = r.status;
     showOutput('wf2Output', r);
     log('Planning status: ' + r.status + ' (node: ' + (r.current_node || 'n/a') + ')', r.status === 'completed' ? 'ok' : 'info');
+    state.wf2.currentNode = r.current_node;
+    renderStateTimeline('planning', r.current_node);
 
     if (r.status === 'completed') {
       setStep(8, 'done');
@@ -1343,6 +1522,9 @@ async function doTriggerCodegen() {
     log('Code generation triggered, run_id: ' + r.id, 'ok');
     document.getElementById('btnPollCodegen').disabled = false;
     document.getElementById('btnCodegenFinal').disabled = false;
+    _nodeStates[r.id] = {};
+    startSSEConnection('codegen', r.id);
+    renderStateTimeline('codegen', 'load_artifacts');
   } catch (e) { showOutput('wf3Output', e, true); log('Trigger codegen failed', 'err'); }
 }
 
@@ -1354,6 +1536,8 @@ async function doPollCodegenStatus() {
     state.wf3.runStatus = r.status;
     showOutput('wf3Output', r);
     log('Codegen status: ' + r.status + ' (node: ' + (r.current_node || 'n/a') + ')', r.status === 'completed' ? 'ok' : 'info');
+    state.wf3.currentNode = r.current_node;
+    renderStateTimeline('codegen', r.current_node);
 
     if (r.status === 'completed') {
       setStep(16, 'done');
@@ -1537,6 +1721,183 @@ async function doGetCodegenEvents() {
     log('Codegen events fetched', 'ok');
   } catch (e) { showOutput('codegenFinalOutput', e, true); log('Codegen events fetch failed', 'err'); }
 }
+
+// ===== STATE TIMELINE =====
+const workflowNodes = {
+  requirements: ["document_ingestion", "gap_analysis", "clarification_generator", "requirements_synthesizer", "validation"],
+  planning: ["load_requirements", "pattern_selection", "research", "architecture", "planning", "validation", "save_artifacts", "approval"],
+  codegen: ["load_artifacts", "execute_task", "process_next", "generate_scaffolding", "bundle_and_save", "approval"],
+};
+const nodeLabels = {
+  document_ingestion: "Document Ingestion", gap_analysis: "Gap Analysis",
+  clarification_generator: "Clarifications", requirements_synthesizer: "Synthesis",
+  validation: "Validation", load_requirements: "Load Requirements",
+  pattern_selection: "Pattern Selection", research: "Research",
+  architecture: "Architecture", planning: "Planning", save_artifacts: "Save Artifacts",
+  approval: "Approval", load_artifacts: "Load Artifacts", execute_task: "Execute Task",
+  process_next: "Process Next", generate_scaffolding: "Generate Scaffolding",
+  bundle_and_save: "Bundle & Save",
+};
+let _sseConnections = {};
+let _nodeStates = {};
+
+function _getTimelineId(wf) { return 'timelineWf' + ({requirements:1,planning:2,codegen:3}[wf] || 1); }
+function _getTimelineBodyId(wf) { return _getTimelineId(wf) + 'Body'; }
+
+function renderStateTimeline(workflowType, currentNode) {
+  const nodes = workflowNodes[workflowType];
+  if (!nodes) return;
+  const bodyId = _getTimelineBodyId(workflowType);
+  const body = document.getElementById(bodyId);
+  if (!body) return;
+
+  const runId = state['wf' + ({requirements:1,planning:2,codegen:3}[workflowType])].runId;
+  const captured = _nodeStates[runId] || {};
+
+  let html = '';
+  nodes.forEach((nodeName, i) => {
+    const isLast = i === nodes.length - 1;
+    const capturedData = captured[nodeName];
+    let dotClass = '';
+    let lineClass = '';
+
+    if (capturedData) {
+      dotClass = 'done';
+      lineClass = 'done';
+    } else if (currentNode === nodeName) {
+      dotClass = 'active';
+    }
+
+    const changedFields = capturedData ? (capturedData.changed_fields || []) : [];
+    const hasState = !!capturedData;
+
+    html += `<div class="timeline-node">
+      <div class="node-indicator">
+        <div class="node-dot ${dotClass}"></div>
+        ${isLast ? '' : `<div class="node-line ${lineClass}"></div>`}
+      </div>
+      <div class="node-content">
+        <div class="node-name">
+          ${nodeLabels[nodeName] || nodeName}
+          ${currentNode === nodeName ? '<span class="node-label">running...</span>' : ''}
+          ${hasState ? `<span class="node-duration">done</span>` : ''}
+        </div>
+        ${hasState ? `<div class="node-changed" onclick="toggleStateDiff('${workflowType}','${nodeName}')">&#9654; Changed: ${changedFields.join(', ') || 'none'}</div>
+        <div class="state-diff" id="sdiff_${workflowType}_${nodeName}">
+          <div class="state-diff-header">
+            <span class="active" onclick="showStateView('${workflowType}','${nodeName}','before',this)">Before</span>
+            <span onclick="showStateView('${workflowType}','${nodeName}','after',this)">After</span>
+          </div>
+          <div class="state-diff-body" id="sdiffbody_${workflowType}_${nodeName}"></div>
+        </div>` : ''}
+      </div>
+    </div>`;
+  });
+
+  body.innerHTML = html;
+  const container = document.getElementById(_getTimelineId(workflowType));
+  if (container) container.classList.remove('hidden');
+
+  if (runId && nodes.some(n => captured[n])) {
+    const firstCaptured = nodes.find(n => captured[n]);
+    if (firstCaptured) showStateView(workflowType, firstCaptured, 'before');
+  }
+}
+
+function toggleStateDiff(wf, nodeName) {
+  const el = document.getElementById('sdiff_' + wf + '_' + nodeName);
+  if (el) {
+    el.classList.toggle('open');
+    if (el.classList.contains('open')) showStateView(wf, nodeName, 'before');
+  }
+}
+
+function showStateView(wf, nodeName, view, clickedEl) {
+  const runId = state['wf' + ({requirements:1,planning:2,codegen:3}[wf])].runId;
+  const captured = (_nodeStates[runId] || {})[nodeName];
+  if (!captured) return;
+
+  const diffEl = document.getElementById('sdiff_' + wf + '_' + nodeName);
+  if (!diffEl) return;
+  const header = diffEl.querySelector('.state-diff-header');
+  if (header) {
+    header.querySelectorAll('span').forEach(s => s.classList.remove('active'));
+    if (clickedEl) clickedEl.classList.add('active');
+  }
+
+  const bodyEl = document.getElementById('sdiffbody_' + wf + '_' + nodeName);
+  if (!bodyEl) return;
+
+  const stateData = captured[view] || {};
+  const otherData = captured[view === 'before' ? 'after' : 'before'] || {};
+  let html = '';
+
+  const allKeys = new Set([...Object.keys(stateData), ...Object.keys(otherData)]);
+  const skipKeys = new Set(['project_id', 'run_id', 'messages']);
+
+  allKeys.forEach(key => {
+    if (skipKeys.has(key)) return;
+    const val = stateData[key];
+    const otherVal = otherData[key];
+    const valStr = val === null || val === undefined ? 'null' : (typeof val === 'object' ? JSON.stringify(val) : String(val));
+    const otherStr = otherVal === null || otherVal === undefined ? 'null' : (typeof otherVal === 'object' ? JSON.stringify(otherVal) : String(otherVal));
+    const displayStr = valStr.length > 200 ? valStr.substring(0, 200) + '...' : valStr;
+
+    let valClass = view;
+    if (view === 'after' && !otherData.hasOwnProperty(key)) valClass = 'added';
+    if (view === 'before' && !stateData.hasOwnProperty(key)) valClass = 'removed';
+
+    html += `<div class="state-diff-row"><span class="diff-key">${key}</span><span class="diff-val ${valClass}">${displayStr}</span></div>`;
+  });
+
+  bodyEl.innerHTML = html || '<div class="state-diff-row"><span class="diff-key" style="color:var(--muted)">no data</span></div>';
+}
+
+function startSSEConnection(workflowType, runId) {
+  stopSSEConnection(workflowType);
+  if (!_nodeStates[runId]) _nodeStates[runId] = {};
+
+  const wfNum = {requirements:1,planning:2,codegen:3}[workflowType];
+  const url = `${API}/projects/${state.projectId}/runs/${runId}/events`;
+  const es = new EventSource(url);
+  _sseConnections[workflowType] = es;
+
+  es.onmessage = function(e) {
+    try {
+      const parsed = JSON.parse(e.data);
+      if (parsed.event_type === 'node_state_captured') {
+        const nodeData = parsed.data;
+        const nodeName = nodeData.node_name;
+        if (!_nodeStates[runId]) _nodeStates[runId] = {};
+        _nodeStates[runId][nodeName] = nodeData;
+        const r = state['wf' + wfNum];
+        renderStateTimeline(workflowType, r?.currentNode || null);
+        log(`[STATE] ${nodeLabels[nodeName] || nodeName}: ${nodeData.changed_fields?.length || 0} fields changed`, 'ok');
+      }
+    } catch {}
+  };
+
+  es.onerror = function() {
+    log(`[SSE] ${workflowType} connection error, reconnecting...`, 'err');
+  };
+
+  log(`[SSE] Connected to ${workflowType} events`, 'ok');
+}
+
+function stopSSEConnection(workflowType) {
+  if (_sseConnections[workflowType]) {
+    _sseConnections[workflowType].close();
+    delete _sseConnections[workflowType];
+  }
+}
+
+const _origTriggerReq = typeof doTriggerRequirements === 'function' ? doTriggerRequirements : null;
+const _origTriggerPlan = typeof doTriggerPlanning === 'function' ? doTriggerPlanning : null;
+const _origTriggerCode = typeof doTriggerCodegen === 'function' ? doTriggerCodegen : null;
+
+const _origPollReq = typeof doPollRunStatus === 'function' ? doPollRunStatus : null;
+const _origPollPlan = typeof doPollPlanningStatus === 'function' ? doPollPlanningStatus : null;
+const _origPollCode = typeof doPollCodegenStatus === 'function' ? doPollCodegenStatus : null;
 
 // ===== INIT =====
 async function checkHealth() {

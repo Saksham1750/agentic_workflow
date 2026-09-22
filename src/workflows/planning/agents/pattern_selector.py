@@ -17,11 +17,12 @@ Your role is to analyze project requirements and select the most appropriate age
 1. Analyze the requirements document carefully
 2. Search the Pattern KB for patterns that match the project's needs
 3. Select a MINIMAL set of patterns - only those truly needed
-4. For each selected pattern, provide:
+4. If the project is a standard software application (CRUD, REST API, web app, mobile backend, etc.) with NO agentic or AI-agent requirements, return an EMPTY selected_patterns list — this is correct and expected behavior
+5. For each selected pattern, provide:
    - Pattern name
    - Rationale explaining WHY it was chosen
    - Which specific requirements it addresses
-5. Do NOT over-select patterns. Fewer, well-justified patterns are better.
+6. Do NOT over-select patterns. Fewer, well-justified patterns are better. Zero is valid when no patterns are needed.
 
 ## Output Format (JSON):
 {
@@ -34,6 +35,8 @@ Your role is to analyze project requirements and select the most appropriate age
   ],
   "overall_rationale": "Summary of selection strategy"
 }
+
+Note: If no agentic patterns are needed (e.g., simple CRUD, REST API, static site, standard web app), return "selected_patterns": [] with an overall_rationale explaining why no patterns are required.
 """
 
 class PatternSelectorAgent:
@@ -50,6 +53,7 @@ class PatternSelectorAgent:
         requirements_md = state.get("requirements_md", "")
         requirements_json = state.get("requirements_json", {})
         project_id = state.get("project_id", "")
+        run_id = state.get("run_id", "")
 
         search_query = self._build_search_query(requirements_json)
         
@@ -69,7 +73,8 @@ class PatternSelectorAgent:
 
         if self.llm:
             selected = await self._select_with_llm(
-                requirements_md, requirements_json, available_patterns
+                requirements_md, requirements_json, available_patterns,
+                run_id=run_id, project_id=project_id,
             )
         else:
             selected = self._select_with_rules(requirements_json, available_patterns)
@@ -98,6 +103,8 @@ class PatternSelectorAgent:
         requirements_md: str,
         requirements_json: dict,
         available_patterns: list[dict],
+        run_id: str = "",
+        project_id: str = "",
     ) -> dict:
         patterns_text = "\n\n".join([
             f"### {p['name']}\n{p['content'][:500]}" for p in available_patterns
@@ -115,10 +122,13 @@ class PatternSelectorAgent:
 Select the minimal set of patterns needed for this project. Return JSON only."""
 
         try:
+            from src.observability.token_callback import TokenTrackingCallback
+            callback = TokenTrackingCallback(run_id, project_id, "pattern_selector") if run_id and project_id else None
+            config = {"callbacks": [callback]} if callback else {}
             response = await self.llm.ainvoke([
                 SystemMessage(content=PATTERN_SELECTOR_SYSTEM_PROMPT),
                 HumanMessage(content=user_message),
-            ])
+            ], config=config)
 
             content = response.content
             if "```json" in content:
@@ -174,13 +184,8 @@ Select the minimal set of patterns needed for this project. Return JSON only."""
                     "requirement_mapping": [fr.get("id", "") for fr in frs[:2]],
                 })
 
-        if not selected and available_patterns:
-            top = available_patterns[0]
-            selected.append({
-                "name": top["name"],
-                "rationale": "Best matching pattern from Knowledge Base",
-                "requirement_mapping": [],
-            })
+        # If no rules matched, return empty — not every project needs agentic patterns
+
 
         return {
             "selected_patterns": selected[:5],

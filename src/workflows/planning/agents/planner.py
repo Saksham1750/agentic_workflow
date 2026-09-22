@@ -18,6 +18,7 @@ Your role is to decompose the architecture into an ordered, code-ready task list
 3. Order tasks by dependencies (no forward dependencies)
 4. Include acceptance criteria for each task
 5. Reference which patterns inform each task's implementation
+6. If no patterns are selected (`selected_patterns` is empty), leave `pattern_refs` as `[]` for all tasks — do not invent pattern references
 
 ## Task Requirements:
 - Title: Clear, descriptive name
@@ -60,10 +61,13 @@ class PlannerAgent:
         requirements_json = state.get("requirements_json", {})
         architecture_json = state.get("architecture_json", {})
         selected_patterns = state.get("selected_patterns", [])
+        run_id = state.get("run_id", "")
+        project_id = state.get("project_id", "")
 
         if self.llm:
             result = await self._plan_with_llm(
-                requirements_json, architecture_json, selected_patterns
+                requirements_json, architecture_json, selected_patterns,
+                run_id=run_id, project_id=project_id,
             )
         else:
             result = self._plan_without_llm(
@@ -80,6 +84,8 @@ class PlannerAgent:
         requirements_json: dict,
         architecture_json: dict,
         selected_patterns: list[dict],
+        run_id: str = "",
+        project_id: str = "",
     ) -> dict:
         user_message = f"""## Requirements
 {json.dumps(requirements_json, indent=2)[:2000]}
@@ -94,10 +100,13 @@ class PlannerAgent:
 Create an ordered task list. Return JSON with tasks array."""
 
         try:
+            from src.observability.token_callback import TokenTrackingCallback
+            callback = TokenTrackingCallback(run_id, project_id, "planner") if run_id and project_id else None
+            config = {"callbacks": [callback]} if callback else {}
             response = await self.llm.ainvoke([
                 SystemMessage(content=PLANNER_SYSTEM_PROMPT),
                 HumanMessage(content=user_message),
-            ])
+            ], config=config)
 
             content = response.content
             if "```json" in content:

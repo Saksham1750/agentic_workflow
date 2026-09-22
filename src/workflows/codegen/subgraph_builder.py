@@ -4,6 +4,7 @@ from langgraph.graph import StateGraph, START, END
 
 from src.workflows.codegen.agents.developer import developer_agent
 from src.workflows.codegen.agents.reviewers import reviewer_agents
+from src.observability.tracing import traced_node
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +27,7 @@ class TaskSubgraphState(TypedDict):
     max_iterations: int
 
 
+@traced_node("developer")
 async def developer_node(state: dict) -> dict:
     current_task = state.get("current_task", {})
     review_feedback = state.get("review_feedback")
@@ -49,6 +51,7 @@ async def developer_node(state: dict) -> dict:
     }
 
 
+@traced_node("validate_code")
 async def validate_code_node(state: dict) -> dict:
     generated_files = state.get("generated_files", [])
     issues = []
@@ -109,13 +112,17 @@ def _check_imports(content: str) -> list[str]:
     return list(set(missing))
 
 
+@traced_node("parallel_reviewers")
 async def parallel_reviewers_node(state: dict) -> dict:
     generated_files = state.get("generated_files", [])
     current_task = state.get("current_task", {})
     patterns = state.get("selected_patterns", [])
+    run_id = state.get("run_id", "")
+    project_id = state.get("project_id", "")
 
     workflow_review, prompt_review, security_review = await _run_reviewers_in_parallel(
         generated_files, patterns, current_task,
+        run_id=run_id, project_id=project_id,
     )
 
     return {
@@ -130,13 +137,15 @@ async def _run_reviewers_in_parallel(
     files: list[dict],
     patterns: list[dict],
     task: dict,
+    run_id: str = "",
+    project_id: str = "",
 ) -> tuple[dict, dict, dict]:
     import asyncio
 
     results = await asyncio.gather(
-        reviewer_agents.review_workflow(files, patterns, task),
-        reviewer_agents.review_prompt(files, patterns, task),
-        reviewer_agents.review_security(files, patterns, task),
+        reviewer_agents.review_workflow(files, patterns, task, run_id=run_id, project_id=project_id),
+        reviewer_agents.review_prompt(files, patterns, task, run_id=run_id, project_id=project_id),
+        reviewer_agents.review_security(files, patterns, task, run_id=run_id, project_id=project_id),
         return_exceptions=True,
     )
 

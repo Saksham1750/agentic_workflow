@@ -14,18 +14,26 @@ from src.exceptions import AppError, app_error_handler
 from src.routers import health, projects, documents, auth, patterns, runs, tasks, workflows
 from src.middleware.auth import AuthMiddleware
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
-logger = logging.getLogger(__name__)
-
 settings = get_settings()
+
+if settings.OTEL_ENABLED:
+    from src.observability.logging import setup_structured_logging
+    setup_structured_logging()
+else:
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    if settings.OTEL_ENABLED:
+        from src.observability.setup import init_observability
+        init_observability(app)
+
     logger.info("Initializing database...")
     await init_db()
 
-    from pathlib import Path
     Path(settings.DATA_ROOT).mkdir(parents=True, exist_ok=True)
     Path(settings.CHROMA_PERSIST_DIR).mkdir(parents=True, exist_ok=True)
 
@@ -41,6 +49,11 @@ async def lifespan(app: FastAPI):
 
     from src.workflows.checkpointer import close_checkpointer
     await close_checkpointer()
+
+    if settings.OTEL_ENABLED:
+        from src.observability.setup import shutdown_observability
+        shutdown_observability()
+
     logger.info("Shutting down")
 
 
@@ -108,6 +121,9 @@ app.include_router(patterns.router)
 app.include_router(runs.router)
 app.include_router(tasks.router)
 app.include_router(workflows.router)
+
+from src.routers import observability
+app.include_router(observability.router)
 
 
 @app.websocket("/projects/{project_id}/runs/{run_id}/hitl")

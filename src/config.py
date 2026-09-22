@@ -23,6 +23,10 @@ class Settings(BaseSettings):
     COST_CEILING_PER_RUN: float = 10.0
     MODEL_PRICING: str = '{"gpt-5.5":{"input":0.01,"output":0.03},"gpt-5.4":{"input":0.005,"output":0.015}}'
 
+    LOG_LEVEL: str = "INFO"
+    LOG_FORMAT: str = "json"
+    OTEL_ENABLED: bool = True
+
     ALLOWED_MIME_TYPES: list[str] = [
         "application/pdf",
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
