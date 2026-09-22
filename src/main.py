@@ -145,3 +145,8 @@ async def root():
 @app.get("/ui", tags=["root"])
 async def ui():
     return FileResponse(Path(__file__).parent.parent / "static" / "index.html")
+
+
+@app.get("/node", tags=["root"])
+async def node_ui():
+    return FileResponse(Path(__file__).parent.parent / "static" / "node.html")

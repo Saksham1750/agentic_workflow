@@ -573,6 +573,7 @@ async def approval_node(state: dict) -> dict:
     else:
         feedback = approval.get("feedback", "No feedback provided") if isinstance(approval, dict) else str(approval)
         return {
+            "feedback": feedback,
             "approval_result": {"approved": False, "feedback": feedback},
             "current_phase": "rejected",
         }

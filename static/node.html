@@ -1,0 +1,973 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Agent Factory v2 — Workflow Graph</title>
+<style>
+  :root { --bg: #0f1117; --card: #1a1d27; --border: #2a2d3a; --text: #e1e4ed; --muted: #8b8fa3; --accent: #6c5ce7; --accent2: #00b894; --danger: #e74c3c; --warn: #f39c12; --success: #00b894; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; display: flex; flex-direction: column; }
+
+  /* ── Header ── */
+  .header { background: var(--card); border-bottom: 1px solid var(--border); padding: 14px 32px; display: flex; align-items: center; gap: 16px; flex-shrink: 0; }
+  .header h1 { font-size: 18px; font-weight: 600; }
+  .header .badge { background: var(--accent); color: white; padding: 2px 10px; border-radius: 12px; font-size: 12px; }
+  .header .nav-link { margin-left: auto; color: var(--muted); text-decoration: none; font-size: 13px; padding: 6px 14px; border: 1px solid var(--border); border-radius: 8px; transition: all 0.15s; }
+  .header .nav-link:hover { color: var(--text); border-color: var(--accent); }
+
+  /* ── Layout ── */
+  .main { display: flex; flex: 1; overflow: hidden; }
+  .sidebar { width: 320px; border-right: 1px solid var(--border); background: var(--card); display: flex; flex-direction: column; overflow-y: auto; flex-shrink: 0; }
+  .sidebar-section { padding: 16px; border-bottom: 1px solid var(--border); }
+  .sidebar-section h3 { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px; }
+
+  .graph-area { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+  /* ── Tabs ── */
+  .wf-tabs { display: flex; gap: 0; background: var(--card); border-bottom: 1px solid var(--border); flex-shrink: 0; }
+  .wf-tab { padding: 12px 24px; cursor: pointer; font-size: 13px; font-weight: 500; color: var(--muted); border-bottom: 2px solid transparent; transition: all 0.15s; display: flex; align-items: center; gap: 8px; }
+  .wf-tab:hover { color: var(--text); background: rgba(108,92,231,0.05); }
+  .wf-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .wf-tab .wf-icon { font-size: 16px; }
+  .wf-tab .wf-status { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
+  .wf-tab .wf-status.done { background: var(--success); }
+  .wf-tab .wf-status.active { background: var(--warn); animation: pulse 1.5s infinite; }
+  .wf-tab .wf-status.error { background: var(--danger); }
+
+  /* ── Graph Canvas ── */
+  .graph-canvas { flex: 1; position: relative; overflow: auto; padding: 40px; }
+  .graph-svg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; }
+  .graph-svg path { fill: none; stroke: var(--border); stroke-width: 2; transition: stroke 0.4s; }
+  .graph-svg path.active { stroke: var(--warn); stroke-dasharray: 8 4; animation: dash 1s linear infinite; }
+  .graph-svg path.done { stroke: var(--success); }
+
+  .graph-nodes { position: relative; z-index: 2; display: flex; align-items: center; gap: 40px; min-height: 200px; }
+
+  /* ── Node Card ── */
+  .graph-node { width: 180px; background: var(--card); border: 2px solid var(--border); border-radius: 12px; padding: 16px; cursor: pointer; transition: all 0.3s; position: relative; user-select: none; }
+  .graph-node:hover { border-color: var(--accent); transform: translateY(-2px); box-shadow: 0 4px 20px rgba(108,92,231,0.15); }
+  .graph-node.active { border-color: var(--warn); box-shadow: 0 0 20px rgba(243,156,18,0.2); }
+  .graph-node.done { border-color: var(--success); }
+  .graph-node.error { border-color: var(--danger); }
+  .graph-node.hitl-pending { border-color: var(--warn); animation: hitlPulse 2s infinite; }
+  .graph-node .node-icon { width: 40px; height: 40px; border-radius: 10px; background: var(--border); display: flex; align-items: center; justify-content: center; font-size: 18px; margin-bottom: 10px; transition: background 0.3s; }
+  .graph-node.active .node-icon { background: var(--warn); }
+  .graph-node.done .node-icon { background: var(--success); }
+  .graph-node.error .node-icon { background: var(--danger); }
+  .graph-node.hitl-pending .node-icon { background: var(--warn); }
+  .graph-node .node-title { font-size: 13px; font-weight: 600; line-height: 1.3; }
+  .graph-node .node-subtitle { font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .graph-node .node-status { position: absolute; top: 10px; right: 10px; font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 10px; }
+  .graph-node .node-status.pending { background: rgba(139,143,163,0.15); color: var(--muted); }
+  .graph-node .node-status.active { background: rgba(243,156,18,0.15); color: var(--warn); }
+  .graph-node .node-status.done { background: rgba(0,184,148,0.15); color: var(--success); }
+  .graph-node .node-status.error { background: rgba(231,76,60,0.15); color: var(--danger); }
+  .graph-node .node-status.awaiting { background: rgba(243,156,18,0.15); color: var(--warn); }
+  .graph-node .hitl-badge { position: absolute; bottom: -8px; left: 50%; transform: translateX(-50%); background: var(--warn); color: white; font-size: 9px; font-weight: 700; padding: 2px 8px; border-radius: 8px; letter-spacing: 0.5px; }
+
+  /* ── Legend ── */
+  .legend { display: flex; gap: 20px; padding: 12px 20px; background: var(--card); border-top: 1px solid var(--border); flex-shrink: 0; }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .legend-dot.pending { background: var(--muted); }
+  .legend-dot.active { background: var(--warn); }
+  .legend-dot.done { background: var(--success); }
+  .legend-dot.error { background: var(--danger); }
+  .legend-dot.hitl { background: var(--warn); border: 2px solid var(--text); }
+
+  /* ── Side Panel ── */
+  .node-panel { position: fixed; top: 0; right: -480px; width: 480px; height: 100vh; background: var(--card); border-left: 1px solid var(--border); z-index: 200; transition: right 0.3s ease; display: flex; flex-direction: column; box-shadow: -4px 0 30px rgba(0,0,0,0.3); }
+  .node-panel.open { right: 0; }
+  .panel-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+  .panel-header .panel-title { font-size: 15px; font-weight: 600; flex: 1; }
+  .panel-header .panel-close { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 20px; padding: 4px; line-height: 1; }
+  .panel-header .panel-close:hover { color: var(--text); }
+  .panel-body { flex: 1; overflow-y: auto; padding: 20px; }
+
+  /* ── Panel Content ── */
+  .panel-status { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 4px 12px; border-radius: 10px; margin-bottom: 16px; }
+  .panel-status.pending { background: rgba(139,143,163,0.15); color: var(--muted); }
+  .panel-status.active { background: rgba(243,156,18,0.15); color: var(--warn); }
+  .panel-status.done { background: rgba(0,184,148,0.15); color: var(--success); }
+  .panel-status.error { background: rgba(231,76,60,0.15); color: var(--danger); }
+  .panel-status.awaiting { background: rgba(243,156,18,0.15); color: var(--warn); }
+
+  .panel-info-row { display: flex; gap: 8px; padding: 6px 0; font-size: 13px; border-bottom: 1px solid rgba(42,45,58,0.5); }
+  .panel-info-row:last-child { border-bottom: none; }
+  .panel-info-row .info-label { color: var(--muted); min-width: 100px; flex-shrink: 0; }
+  .panel-info-row .info-value { color: var(--text); word-break: break-all; }
+
+  .panel-section { margin-top: 16px; }
+  .panel-section h4 { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+
+  .panel-artifact { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-bottom: 8px; }
+  .panel-artifact pre { font-size: 12px; white-space: pre-wrap; max-height: 300px; overflow-y: auto; font-family: 'Cascadia Code', 'Fira Code', monospace; }
+
+  .state-diff-row { display: flex; gap: 8px; padding: 4px 0; font-size: 12px; font-family: 'Cascadia Code', 'Fira Code', monospace; }
+  .state-diff-row .diff-key { color: var(--accent); font-weight: 600; min-width: 120px; flex-shrink: 0; }
+  .state-diff-row .diff-val { color: var(--text); word-break: break-all; }
+  .state-diff-row .diff-val.before { color: var(--muted); }
+  .state-diff-row .diff-val.after { color: var(--success); }
+
+  /* ── HITL Panel ── */
+  .hitl-section { margin-top: 16px; }
+  .hitl-section h4 { font-size: 13px; font-weight: 600; color: var(--accent); margin-bottom: 10px; }
+  .question-card { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 14px; margin-bottom: 10px; }
+  .question-card .q-title { font-weight: 600; font-size: 13px; margin-bottom: 4px; }
+  .question-card .q-context { font-size: 11px; color: var(--muted); margin-bottom: 8px; }
+  .question-card textarea { min-height: 50px; width: 100%; padding: 8px 10px; background: var(--card); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 13px; font-family: inherit; resize: vertical; }
+  .question-card textarea:focus { outline: none; border-color: var(--accent); }
+
+  .req-section { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-bottom: 8px; }
+  .req-section h4 { font-size: 13px; color: var(--accent); margin-bottom: 6px; }
+  .req-item { background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; margin-bottom: 6px; }
+  .req-item .req-id { color: var(--accent); font-weight: 700; font-size: 11px; margin-right: 4px; }
+  .req-item .req-title { font-weight: 600; font-size: 12px; }
+  .req-item .req-content { font-size: 11px; color: var(--muted); margin-top: 4px; white-space: pre-wrap; max-height: 100px; overflow-y: auto; }
+
+  .plan-summary .plan-section { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-bottom: 8px; }
+  .plan-summary .plan-section h4 { font-size: 12px; color: var(--accent); margin-bottom: 6px; }
+  .plan-summary .plan-section pre { font-size: 11px; white-space: pre-wrap; max-height: 200px; overflow-y: auto; margin: 0; }
+  .plan-summary .validation-summary { display: flex; gap: 12px; align-items: center; margin-bottom: 8px; }
+  .plan-summary .validation-summary .score { font-size: 20px; font-weight: 700; }
+  .plan-summary .validation-summary .score.pass { color: var(--success); }
+  .plan-summary .validation-summary .score.fail { color: var(--danger); }
+  .plan-summary .task-list { list-style: none; padding: 0; margin: 0; }
+  .plan-summary .task-list li { padding: 4px 0; border-bottom: 1px solid var(--border); font-size: 12px; }
+  .plan-summary .task-list li:last-child { border-bottom: none; }
+
+  .file-tree { list-style: none; padding: 0; margin: 0; }
+  .file-tree li { padding: 4px 0; font-size: 12px; font-family: 'Cascadia Code', monospace; display: flex; align-items: center; gap: 6px; }
+  .file-tree li .file-icon { color: var(--accent); }
+
+  label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; margin-top: 10px; }
+  textarea { width: 100%; padding: 10px 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 13px; font-family: inherit; min-height: 60px; resize: vertical; }
+  textarea:focus { outline: none; border-color: var(--accent); }
+
+  .btn { padding: 8px 16px; border: none; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 600; transition: all 0.15s; }
+  .btn-primary { background: var(--accent); color: white; }
+  .btn-primary:hover { background: #5b4bd5; }
+  .btn-success { background: var(--success); color: white; }
+  .btn-success:hover { background: #00a381; }
+  .btn-danger { background: var(--danger); color: white; }
+  .btn-danger:hover { background: #c0392b; }
+  .btn-warn { background: var(--warn); color: white; }
+  .btn-warn:hover { background: #e08e0b; }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-row { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+
+  .output { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; margin-top: 10px; font-family: 'Cascadia Code', 'Fira Code', monospace; font-size: 12px; white-space: pre-wrap; max-height: 300px; overflow-y: auto; }
+  .output:empty { display: none; }
+  .output.error { border-color: var(--danger); color: var(--danger); }
+  .output.success { border-color: var(--success); }
+
+  /* ── Sidebar Controls ── */
+  .sidebar input[type="text"], .sidebar input[type="password"] {
+    width: 100%; padding: 8px 10px; background: var(--bg); border: 1px solid var(--border);
+    border-radius: 6px; color: var(--text); font-size: 13px;
+  }
+  .sidebar input:focus { outline: none; border-color: var(--accent); }
+  .sidebar .btn { width: 100%; margin-top: 8px; }
+  .sidebar .btn-row { flex-direction: column; }
+  .sidebar .btn-row .btn { width: 100%; margin-top: 0; }
+  .sidebar .btn-row + .btn-row { margin-top: 8px; }
+
+  .sidebar .status-line { display: flex; align-items: center; gap: 6px; font-size: 12px; padding: 6px 0; color: var(--muted); }
+  .sidebar .status-line .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
+  .sidebar .status-line .dot.on { background: var(--success); }
+
+  .project-display { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin-top: 8px; font-size: 13px; }
+  .project-display .proj-name { font-weight: 600; color: var(--text); }
+  .project-display .proj-id { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+  .wf-trigger-row { display: flex; gap: 8px; margin-top: 10px; }
+  .wf-trigger-row .btn { flex: 1; font-size: 12px; padding: 8px; }
+
+  hr.divider { border: none; border-top: 1px solid var(--border); margin: 12px 0; }
+
+  /* ── Animations ── */
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+  @keyframes dash { to { stroke-dashoffset: -12; } }
+  @keyframes hitlPulse { 0%,100%{box-shadow:0 0 0 0 rgba(243,156,18,0.3)} 50%{box-shadow:0 0 16px 4px rgba(243,156,18,0.15)} }
+  @keyframes nodeComplete { 0%{transform:scale(1)} 50%{transform:scale(1.05)} 100%{transform:scale(1)} }
+  .graph-node.just-done { animation: nodeComplete 0.4s ease; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>AI Agent Factory v2</h1>
+  <span class="badge">Workflow Graph</span>
+  <a href="/ui" class="nav-link">← Classic UI</a>
+</div>
+
+<div class="main">
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="sidebar-section">
+      <h3>Authentication</h3>
+      <label style="margin-top:0">Username</label>
+      <input type="text" id="authUser" value="demo">
+      <label>Password</label>
+      <input type="password" id="authPass" value="pass123">
+      <div class="btn-row">
+        <button class="btn btn-primary" onclick="doRegister()">Register</button>
+        <button class="btn btn-primary" onclick="doLogin()">Login</button>
+      </div>
+      <div class="output" id="authOutput"></div>
+      <div class="status-line"><span class="dot" id="authDot"></span><span id="authStatusText">Not logged in</span></div>
+    </div>
+
+    <div class="sidebar-section">
+      <h3>Project</h3>
+      <label style="margin-top:0">Name</label>
+      <input type="text" id="projName" value="My Test Project">
+      <label>Description</label>
+      <input type="text" id="projDesc" value="Testing Workflows">
+      <button class="btn btn-primary" onclick="doCreateProject()">Create Project</button>
+      <div id="projectDisplay"></div>
+      <div class="output" id="projOutput"></div>
+    </div>
+
+    <div class="sidebar-section">
+      <h3>Upload Document</h3>
+      <label style="margin-top:0">BRD / PRD File</label>
+      <input type="file" id="docFile" accept=".md,.txt,.pdf,.docx,.pptx,.xlsx" multiple style="margin-top:4px;font-size:12px" onchange="handleFileSelect()">
+      <div id="uploadQueue"></div>
+      <div class="btn-row">
+        <button class="btn btn-primary" onclick="doUploadAllDocuments()" id="btnUploadAll" disabled>Upload</button>
+      </div>
+      <div class="status-line"><span class="dot" id="docDot"></span><span id="docStatusText">No document</span></div>
+    </div>
+
+    <div class="sidebar-section">
+      <h3>Workflow Controls</h3>
+      <div class="wf-trigger-row">
+        <button class="btn btn-primary" onclick="triggerWorkflow('requirements')" id="btnTriggerWf1" disabled>W1 Trigger</button>
+        <button class="btn btn-warn" onclick="triggerWorkflow('planning')" id="btnTriggerWf2" disabled>W2 Trigger</button>
+        <button class="btn btn-primary" onclick="triggerWorkflow('codegen')" id="btnTriggerWf3" disabled>W3 Trigger</button>
+      </div>
+      <div class="status-line" style="margin-top:8px"><span class="dot" id="runDot"></span><span id="runStatusText">No active run</span></div>
+      <div class="output" id="triggerOutput"></div>
+    </div>
+  </div>
+
+  <!-- Graph Area -->
+  <div class="graph-area">
+    <div class="wf-tabs" id="wfTabs">
+      <div class="wf-tab active" onclick="switchGraph('requirements')" data-wf="requirements">
+        <span class="wf-icon">📋</span>
+        Requirements
+        <span class="wf-status" id="wfStatusReq"></span>
+      </div>
+      <div class="wf-tab" onclick="switchGraph('planning')" data-wf="planning">
+        <span class="wf-icon">🏗️</span>
+        Planning
+        <span class="wf-status" id="wfStatusPlan"></span>
+      </div>
+      <div class="wf-tab" onclick="switchGraph('codegen')" data-wf="codegen">
+        <span class="wf-icon">⚡</span>
+        Code Generation
+        <span class="wf-status" id="wfStatusCode"></span>
+      </div>
+    </div>
+
+    <div class="graph-canvas" id="graphCanvas">
+      <svg class="graph-svg" id="graphSvg"></svg>
+      <div class="graph-nodes" id="graphNodes"></div>
+    </div>
+
+    <div class="legend">
+      <div class="legend-item"><div class="legend-dot pending"></div>Pending</div>
+      <div class="legend-item"><div class="legend-dot active"></div>Running</div>
+      <div class="legend-item"><div class="legend-dot done"></div>Done</div>
+      <div class="legend-item"><div class="legend-dot error"></div>Error</div>
+      <div class="legend-item"><div class="legend-dot hitl"></div>HITL</div>
+    </div>
+  </div>
+</div>
+
+<!-- Node Detail Panel -->
+<div class="node-panel" id="nodePanel">
+  <div class="panel-header">
+    <div class="panel-title" id="panelTitle">Node Details</div>
+    <button class="panel-close" onclick="closeNodePanel()">&times;</button>
+  </div>
+  <div class="panel-body" id="panelBody"></div>
+</div>
+
+<script>
+const API = '';
+let state = {
+  token: null,
+  projectId: null,
+  documentId: null,
+  docStatus: null,
+  currentWorkflow: 'requirements',
+  wf1: { runId: null, runStatus: null, currentNode: null, questions: null },
+  wf2: { runId: null, runStatus: null, currentNode: null },
+  wf3: { runId: null, runStatus: null, currentNode: null },
+};
+let graphNodeStates = {};
+let _nodeStates = {};
+let _sseConnections = {};
+let _pollIntervals = {};
+
+// ── Workflow Definitions ──
+const graphWorkflows = {
+  requirements: {
+    nodes: [
+      { id: 'document_ingestion', label: 'Document Ingestion', subtitle: 'Parse uploaded docs', icon: '📄', hitl: false },
+      { id: 'gap_analysis', label: 'Gap Analysis', subtitle: 'Identify missing info', icon: '🔍', hitl: false },
+      { id: 'clarification_generator', label: 'Clarifications', subtitle: 'Generate questions', icon: '❓', hitl: true },
+      { id: 'requirements_synthesizer', label: 'Synthesis', subtitle: 'Combine requirements', icon: '📋', hitl: false },
+      { id: 'validation', label: 'Validation', subtitle: 'Verify completeness', icon: '✓', hitl: true },
+    ],
+    edges: [
+      ['document_ingestion', 'gap_analysis'],
+      ['gap_analysis', 'clarification_generator'],
+      ['clarification_generator', 'requirements_synthesizer'],
+      ['requirements_synthesizer', 'validation'],
+    ],
+  },
+  planning: {
+    nodes: [
+      { id: 'load_requirements', label: 'Load Requirements', subtitle: 'Load from W1', icon: '📥', hitl: false },
+      { id: 'pattern_selection', label: 'Pattern Selection', subtitle: 'Choose patterns', icon: '🧩', hitl: false },
+      { id: 'research', label: 'Research', subtitle: 'KB + Web research', icon: '🔬', hitl: false },
+      { id: 'architecture', label: 'Architecture', subtitle: 'Design system', icon: '🏗️', hitl: false },
+      { id: 'planning', label: 'Planning', subtitle: 'Create task plan', icon: '📝', hitl: false },
+      { id: 'validation', label: 'Validation', subtitle: 'Verify plan', icon: '✓', hitl: false },
+      { id: 'save_artifacts', label: 'Save Artifacts', subtitle: 'Persist results', icon: '💾', hitl: false },
+      { id: 'approval', label: 'Approval', subtitle: 'HITL approval', icon: '👤', hitl: true },
+    ],
+    edges: [
+      ['load_requirements', 'pattern_selection'],
+      ['pattern_selection', 'research'],
+      ['research', 'architecture'],
+      ['architecture', 'planning'],
+      ['planning', 'validation'],
+      ['validation', 'save_artifacts'],
+      ['save_artifacts', 'approval'],
+    ],
+  },
+  codegen: {
+    nodes: [
+      { id: 'load_artifacts', label: 'Load Artifacts', subtitle: 'Load from W2', icon: '📥', hitl: false },
+      { id: 'execute_task', label: 'Execute Task', subtitle: 'Generate code', icon: '⚡', hitl: false },
+      { id: 'process_next', label: 'Process Next', subtitle: 'Next task', icon: '➡️', hitl: false },
+      { id: 'generate_scaffolding', label: 'Scaffolding', subtitle: 'Generate files', icon: '📁', hitl: false },
+      { id: 'bundle_and_save', label: 'Bundle & Save', subtitle: 'Package output', icon: '📦', hitl: false },
+      { id: 'approval', label: 'Approval', subtitle: 'HITL approval', icon: '👤', hitl: true },
+    ],
+    edges: [
+      ['load_artifacts', 'execute_task'],
+      ['execute_task', 'process_next'],
+      ['process_next', 'execute_task'],
+      ['execute_task', 'generate_scaffolding'],
+      ['generate_scaffolding', 'bundle_and_save'],
+      ['bundle_and_save', 'approval'],
+    ],
+  },
+};
+
+// ── API ──
+function headers() { return { 'Authorization': 'Bearer ' + state.token, 'Content-Type': 'application/json' }; }
+
+async function api(method, path, body = null, isForm = false) {
+  const opts = { method, headers: {} };
+  if (state.token) opts.headers['Authorization'] = 'Bearer ' + state.token;
+  if (body && !isForm) { opts.headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(body); }
+  if (body && isForm) { opts.body = body; }
+  const res = await fetch(API + path, opts);
+  const json = await res.json().catch(() => null);
+  if (!res.ok) throw { status: res.status, data: json };
+  return json;
+}
+
+function showOutput(id, data, isError = false) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.className = 'output ' + (isError ? 'error' : 'success');
+  el.textContent = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+}
+
+// ── Auth ──
+async function doRegister() {
+  try {
+    const u = document.getElementById('authUser').value, p = document.getElementById('authPass').value;
+    const r = await api('POST', '/auth/register', { username: u, password: p });
+    showOutput('authOutput', r);
+    document.getElementById('authDot').classList.add('on');
+    document.getElementById('authStatusText').textContent = 'Registered';
+  } catch (e) { showOutput('authOutput', e, true); }
+}
+
+async function doLogin() {
+  try {
+    const u = document.getElementById('authUser').value, p = document.getElementById('authPass').value;
+    const r = await api('POST', '/auth/login', { username: u, password: p });
+    state.token = r.access_token;
+    showOutput('authOutput', { user_id: r.user_id, token: r.access_token.substring(0, 30) + '...' });
+    document.getElementById('authDot').classList.add('on');
+    document.getElementById('authStatusText').textContent = 'Logged in';
+    document.getElementById('btnTriggerWf2').disabled = false;
+  } catch (e) { showOutput('authOutput', e, true); }
+}
+
+// ── Project ──
+async function doCreateProject() {
+  try {
+    const name = document.getElementById('projName').value, desc = document.getElementById('projDesc').value;
+    const r = await api('POST', '/projects', { name, description: desc });
+    state.projectId = r.id;
+    document.getElementById('projectDisplay').innerHTML = `<div class="project-display"><div class="proj-name">${r.name}</div><div class="proj-id">${r.id}</div></div>`;
+    document.getElementById('btnUploadAll').disabled = false;
+    showOutput('projOutput', r);
+  } catch (e) { showOutput('projOutput', e, true); }
+}
+
+// ── Upload ──
+let uploadQueue = [];
+let documentIds = [];
+
+function handleFileSelect() {
+  const input = document.getElementById('docFile');
+  const files = Array.from(input.files);
+  files.forEach(f => {
+    if (!uploadQueue.find(q => q.name === f.name && q.size === f.size)) {
+      uploadQueue.push({ file: f, name: f.name, size: f.size, status: 'pending' });
+    }
+  });
+  input.value = '';
+  renderUploadQueue();
+}
+
+function renderUploadQueue() {
+  const c = document.getElementById('uploadQueue');
+  c.innerHTML = '';
+  uploadQueue.forEach((item, i) => {
+    const sizeStr = item.size > 1024*1024 ? (item.size/1024/1024).toFixed(1)+'MB' : item.size > 1024 ? (item.size/1024).toFixed(1)+'KB' : item.size+'B';
+    c.innerHTML += `<div style="font-size:12px;color:var(--muted);padding:3px 0;display:flex;gap:8px;align-items:center"><span style="flex:1">${item.name}</span><span>${sizeStr}</span><span style="color:${item.status==='done'?'var(--success)':item.status==='error'?'var(--danger)':'var(--muted)'}">${item.status}</span></div>`;
+  });
+  document.getElementById('btnUploadAll').disabled = uploadQueue.filter(q => q.status === 'pending').length === 0;
+}
+
+async function doUploadAllDocuments() {
+  if (!state.projectId) return;
+  const pending = uploadQueue.filter(q => q.status === 'pending');
+  for (const item of pending) {
+    item.status = 'uploading';
+    renderUploadQueue();
+    try {
+      const fd = new FormData();
+      fd.append('file', item.file);
+      const r = await api('POST', `/projects/${state.projectId}/documents`, fd, true);
+      item.status = 'done';
+      item.docId = r.id;
+      documentIds.push(r.id);
+    } catch (e) {
+      item.status = 'error';
+    }
+    renderUploadQueue();
+  }
+  state.documentId = documentIds[documentIds.length - 1];
+  state.docStatus = 'uploaded';
+  document.getElementById('docDot').classList.add('on');
+  document.getElementById('docStatusText').textContent = 'Uploaded (' + documentIds.length + ')';
+  document.getElementById('btnTriggerWf1').disabled = false;
+  pollDocStatus();
+}
+
+async function pollDocStatus() {
+  if (!state.documentId) return;
+  try {
+    const r = await api('GET', `/projects/${state.projectId}/documents/${state.documentId}`);
+    state.docStatus = r.status;
+    if (r.status === 'ready') {
+      document.getElementById('docStatusText').textContent = 'Ready';
+      document.getElementById('docDot').className = 'dot on';
+      document.getElementById('btnTriggerWf1').disabled = false;
+      document.getElementById('btnTriggerWf2').disabled = false;
+    } else if (r.status === 'failed') {
+      document.getElementById('docStatusText').textContent = 'Failed';
+      document.getElementById('docDot').className = 'dot';
+    } else {
+      setTimeout(pollDocStatus, 2000);
+    }
+  } catch (e) { setTimeout(pollDocStatus, 3000); }
+}
+
+// ── Graph Rendering ──
+function switchGraph(wf) {
+  state.currentWorkflow = wf;
+  document.querySelectorAll('.wf-tab').forEach(t => t.classList.remove('active'));
+  document.querySelector(`.wf-tab[data-wf="${wf}"]`).classList.add('active');
+  renderGraph(wf);
+}
+
+function renderGraph(wf) {
+  const def = graphWorkflows[wf];
+  const runId = wf === 'requirements' ? state.wf1.runId : wf === 'planning' ? state.wf2.runId : state.wf3.runId;
+  const container = document.getElementById('graphNodes');
+  container.innerHTML = '';
+
+  def.nodes.forEach((node, i) => {
+    const div = document.createElement('div');
+    div.className = 'graph-node';
+    div.dataset.nodeId = node.id;
+    div.dataset.wf = wf;
+
+    const nodeState = getNodeState(wf, node.id, runId);
+    if (nodeState) div.classList.add(nodeState);
+
+    if (node.hitl) {
+      const isAwaiting = runId && (graphNodeStates[runId]?.[node.id] === 'awaiting');
+      if (isAwaiting) div.classList.add('hitl-pending');
+    }
+
+    const statusLabel = nodeState || 'pending';
+
+    div.innerHTML = `
+      <div class="node-icon">${node.icon}</div>
+      <div class="node-title">${node.label}</div>
+      <div class="node-subtitle">${node.subtitle}</div>
+      <div class="node-status ${statusLabel}">${statusLabel}</div>
+      ${node.hitl ? '<div class="hitl-badge">HITL</div>' : ''}
+    `;
+
+    div.addEventListener('click', () => openNodePanel(wf, node.id));
+    container.appendChild(div);
+  });
+
+  setTimeout(() => renderEdges(wf, runId), 50);
+}
+
+function getNodeState(wf, nodeId, runId) {
+  if (!runId) return 'pending';
+  const runKey = wf === 'requirements' ? state.wf1 : wf === 'planning' ? state.wf2 : state.wf3;
+  if (runKey.runStatus === 'completed') {
+    const nodeIndex = graphWorkflows[wf].nodes.findIndex(n => n.id === nodeId);
+    const currentNodeIndex = graphWorkflows[wf].nodes.findIndex(n => n.id === runKey.currentNode);
+    if (currentNodeIndex >= 0 && nodeIndex <= currentNodeIndex) return 'done';
+    if (currentNodeIndex < 0) return 'done';
+  }
+  if (runKey.runStatus === 'awaiting_human' && runKey.currentNode === nodeId) return 'awaiting';
+  if (graphNodeStates[runId]?.[nodeId]) return graphNodeStates[runId][nodeId];
+  if (runKey.currentNode === nodeId) return 'active';
+  if (runKey.runStatus === 'failed' && runKey.currentNode === nodeId) return 'error';
+  return 'pending';
+}
+
+function renderEdges(wf, runId) {
+  const def = graphWorkflows[wf];
+  const svg = document.getElementById('graphSvg');
+  const canvas = document.getElementById('graphCanvas');
+  const container = document.getElementById('graphNodes');
+
+  svg.innerHTML = '';
+  svg.setAttribute('width', canvas.scrollWidth);
+  svg.setAttribute('height', canvas.scrollHeight);
+
+  const nodes = container.querySelectorAll('.graph-node');
+  const nodeMap = {};
+  nodes.forEach(n => {
+    const rect = n.getBoundingClientRect();
+    const canvasRect = canvas.getBoundingClientRect();
+    nodeMap[n.dataset.nodeId] = {
+      x: rect.left - canvasRect.left + canvas.scrollLeft,
+      y: rect.top - canvasRect.top + canvas.scrollTop,
+      w: rect.width,
+      h: rect.height,
+    };
+  });
+
+  def.edges.forEach(([from, to]) => {
+    const f = nodeMap[from], t = nodeMap[to];
+    if (!f || !t) return;
+
+    const x1 = f.x + f.w;
+    const y1 = f.y + f.h / 2;
+    const x2 = t.x;
+    const y2 = t.y + t.h / 2;
+    const cx1 = x1 + (x2 - x1) * 0.4;
+    const cx2 = x2 - (x2 - x1) * 0.4;
+
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', `M${x1},${y1} C${cx1},${y1} ${cx2},${y2} ${x2},${y2}`);
+
+    if (runId) {
+      const fromState = graphNodeStates[runId]?.[from] || 'pending';
+      const toState = graphNodeStates[runId]?.[to] || 'pending';
+      if (fromState === 'done' && toState === 'done') path.classList.add('done');
+      else if (fromState === 'done' && (toState === 'active' || toState === 'awaiting')) path.classList.add('active');
+    }
+
+    svg.appendChild(path);
+  });
+}
+
+function updateGraphNode(runId, nodeName, nodeState) {
+  if (!graphNodeStates[runId]) graphNodeStates[runId] = {};
+  graphNodeStates[runId][nodeName] = nodeState;
+
+  const el = document.querySelector(`.graph-node[data-node-id="${nodeName}"]`);
+  if (el) {
+    el.className = 'graph-node ' + nodeState;
+    el.querySelector('.node-status').className = 'node-status ' + nodeState;
+    el.querySelector('.node-status').textContent = nodeState;
+    if (nodeState === 'done') {
+      el.classList.add('just-done');
+      setTimeout(() => el.classList.remove('just-done'), 500);
+    }
+  }
+
+  const wf = el?.dataset.wf || state.currentWorkflow;
+  const runId2 = wf === 'requirements' ? state.wf1.runId : wf === 'planning' ? state.wf2.runId : state.wf3.runId;
+  renderEdges(wf, runId2);
+}
+
+// ── Side Panel ──
+function openNodePanel(wf, nodeId) {
+  const panel = document.getElementById('nodePanel');
+  const body = document.getElementById('panelBody');
+  const title = document.getElementById('panelTitle');
+  const def = graphWorkflows[wf].nodes.find(n => n.id === nodeId);
+  const runId = wf === 'requirements' ? state.wf1.runId : wf === 'planning' ? state.wf2.runId : state.wf3.runId;
+  const runStatus = wf === 'requirements' ? state.wf1.runStatus : wf === 'planning' ? state.wf2.runStatus : state.wf3.runStatus;
+  const currentNode = wf === 'requirements' ? state.wf1.currentNode : wf === 'planning' ? state.wf2.currentNode : state.wf3.currentNode;
+
+  title.textContent = def.label;
+  const nodeState = getNodeState(wf, nodeId, runId);
+
+  let html = `<div class="panel-status ${nodeState}">${nodeState}</div>`;
+  html += `<div class="panel-info-row"><span class="info-label">Workflow</span><span class="info-value">${wf}</span></div>`;
+  html += `<div class="panel-info-row"><span class="info-label">Node ID</span><span class="info-value">${nodeId}</span></div>`;
+  html += `<div class="panel-info-row"><span class="info-label">HITL</span><span class="info-value">${def.hitl ? 'Yes' : 'No'}</span></div>`;
+  if (runId) html += `<div class="panel-info-row"><span class="info-label">Run ID</span><span class="info-value" style="font-size:11px">${runId}</span></div>`;
+
+  const captured = _nodeStates[runId]?.[nodeId];
+  if (captured) {
+    html += `<div class="panel-section"><h4>State Changes</h4>`;
+    if (captured.changed_fields && captured.changed_fields.length > 0) {
+      captured.changed_fields.forEach(f => {
+        const beforeVal = captured.before ? JSON.stringify(captured.before[f]) : '—';
+        const afterVal = captured.after ? JSON.stringify(captured.after[f]) : '—';
+        html += `<div class="state-diff-row"><span class="diff-key">${f}</span></div>`;
+        html += `<div class="state-diff-row"><span class="diff-key" style="padding-left:12px">before:</span><span class="diff-val before">${esc(beforeVal)}</span></div>`;
+        html += `<div class="state-diff-row"><span class="diff-key" style="padding-left:12px">after:</span><span class="diff-val after">${esc(afterVal)}</span></div>`;
+      });
+    } else {
+      html += `<div style="font-size:12px;color:var(--muted)">No changed fields recorded</div>`;
+    }
+    html += `</div>`;
+  }
+
+  // HITL interaction
+  if (def.hitl && runId && runStatus === 'awaiting_human' && (currentNode === nodeId || currentNode === 'synthesized' || currentNode === 'validation')) {
+    if (nodeId === 'clarification_generator' || (wf === 'requirements' && currentNode !== 'synthesized' && currentNode !== 'validation')) {
+      html += renderClarificationHITL(wf, runId);
+    } else if (nodeId === 'validation' || nodeId === 'approval') {
+      html += renderApprovalHITL(wf, runId);
+    }
+  }
+
+  body.innerHTML = html;
+  panel.classList.add('open');
+}
+
+function closeNodePanel() {
+  document.getElementById('nodePanel').classList.remove('open');
+}
+
+function renderClarificationHITL(wf, runId) {
+  const questions = state.wf1.questions?.pending?.questions || [];
+  let html = `<div class="hitl-section"><h4>Clarification Questions</h4>`;
+  html += `<button class="btn btn-primary" onclick="fetchPendingHitl('${wf}', '${runId}')" style="margin-bottom:10px">Fetch Questions</button>`;
+
+  if (questions.length > 0) {
+    questions.forEach((q, i) => {
+      html += `<div class="question-card">
+        <div class="q-title">Q${i+1}: ${esc(q.question)}</div>
+        <div class="q-context">${esc(q.context || '')}</div>
+        <textarea id="ans_${q.question_id}" placeholder="Your answer..."></textarea>
+      </div>`;
+    });
+    html += `<div class="btn-row"><button class="btn btn-success" onclick="submitClarifications('${wf}', '${runId}')">Submit Answers</button></div>`;
+  }
+  html += `</div>`;
+  return html;
+}
+
+function renderApprovalHITL(wf, runId) {
+  let html = `<div class="hitl-section"><h4>Review & Approve</h4>`;
+  html += `<div id="approvalPreview"></div>`;
+  html += `<button class="btn btn-primary" onclick="loadApprovalPreview('${wf}', '${runId}')" style="margin-top:8px">Load Preview</button>`;
+  html += `<label>Feedback (for rejection)</label>
+    <textarea id="rejectFeedback_${wf}" placeholder="Optional feedback if rejecting..."></textarea>`;
+  html += `<div class="btn-row">
+    <button class="btn btn-success" onclick="approveRun('${runId}')">Approve</button>
+    <button class="btn btn-danger" onclick="rejectRun('${runId}', '${wf}')">Reject with Feedback</button>
+  </div>`;
+  html += `<div class="output" id="hitlOutput"></div>`;
+  html += `</div>`;
+  return html;
+}
+
+function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+// ── HITL Actions ──
+async function fetchPendingHitl(wf, runId) {
+  try {
+    const r = await api('GET', `/projects/${state.projectId}/runs/${runId}/pending-hitl`);
+    state.wf1.questions = r;
+    if (r.pending) {
+      const questions = r.pending.questions || [];
+      openNodePanel('requirements', 'clarification_generator');
+    }
+  } catch (e) { showOutput('hitlOutput', e, true); }
+}
+
+async function submitClarifications(wf, runId) {
+  try {
+    const questions = state.wf1.questions?.pending?.questions || [];
+    const answers = questions.map(q => ({
+      question_id: q.question_id,
+      answer: document.getElementById('ans_' + q.question_id)?.value || 'No answer provided'
+    }));
+    await api('POST', `/projects/${state.projectId}/runs/${runId}/clarifications`, { answers });
+    state.wf1.questions = null;
+    updateGraphNode(runId, 'clarification_generator', 'done');
+    updateGraphNode(runId, 'requirements_synthesizer', 'active');
+    pollRunStatus(wf, runId);
+  } catch (e) { showOutput('hitlOutput', e, true); }
+}
+
+async function approveRun(runId) {
+  try {
+    await api('POST', `/projects/${state.projectId}/runs/${runId}/approve`, { approved: true });
+    const wf = state.currentWorkflow;
+    if (wf === 'requirements') {
+      updateGraphNode(runId, 'validation', 'done');
+    } else if (wf === 'planning') {
+      updateGraphNode(runId, 'approval', 'done');
+    } else {
+      updateGraphNode(runId, 'approval', 'done');
+    }
+    showOutput('hitlOutput', 'Approved!');
+    setTimeout(() => { closeNodePanel(); pollRunStatus(wf, runId); }, 1000);
+  } catch (e) { showOutput('hitlOutput', e, true); }
+}
+
+async function rejectRun(runId, wf) {
+  try {
+    const fb = document.getElementById('rejectFeedback_' + wf)?.value || 'Needs improvement';
+    await api('POST', `/projects/${state.projectId}/runs/${runId}/reject`, { feedback: fb });
+    showOutput('hitlOutput', 'Rejected — workflow will re-run');
+    setTimeout(() => { closeNodePanel(); pollRunStatus(wf, runId); }, 1000);
+  } catch (e) { showOutput('hitlOutput', e, true); }
+}
+
+async function loadApprovalPreview(wf, runId) {
+  const container = document.getElementById('approvalPreview');
+  if (!container) return;
+  container.innerHTML = '<div style="color:var(--muted);font-size:12px">Loading preview...</div>';
+
+  try {
+    if (wf === 'requirements') {
+      const [reqMd, reqJson] = await Promise.all([
+        fetch(`${API}/projects/${state.projectId}/runs/${runId}/artifacts/requirements.md`, { headers: { 'Authorization': 'Bearer ' + state.token } }).then(r => r.ok ? r.text() : null),
+        api('GET', `/projects/${state.projectId}/runs/${runId}/artifacts/requirements.json`).catch(() => null),
+      ]);
+      let html = '';
+      if (reqJson) {
+        const frs = reqJson.functional_requirements || [];
+        const nfrs = reqJson.non_functional_requirements || [];
+        if (frs.length) {
+          html += `<div class="req-section"><h4>Functional Requirements <span style="background:rgba(108,92,231,0.15);color:var(--accent);font-size:10px;padding:2px 6px;border-radius:8px">${frs.length}</span></h4>`;
+          frs.forEach(fr => { html += `<div class="req-item"><span class="req-id">${fr.id || ''}</span><span class="req-title">${esc(fr.title || '')}</span><div class="req-content">${esc(fr.content || fr.description || '')}</div></div>`; });
+          html += `</div>`;
+        }
+        if (nfrs.length) {
+          html += `<div class="req-section"><h4>Non-Functional Requirements <span style="background:rgba(108,92,231,0.15);color:var(--accent);font-size:10px;padding:2px 6px;border-radius:8px">${nfrs.length}</span></h4>`;
+          nfrs.forEach(nfr => { html += `<div class="req-item"><span class="req-id">${nfr.id || ''}</span><span class="req-title">${esc(nfr.title || '')}</span><div class="req-content">${esc(nfr.content || nfr.description || '')}</div></div>`; });
+          html += `</div>`;
+        }
+      }
+      if (reqMd) { html += `<div class="req-section"><h4>Requirements MD</h4><pre style="font-size:11px;white-space:pre-wrap;max-height:200px;overflow-y:auto">${esc(reqMd.substring(0, 3000))}</pre></div>`; }
+      container.innerHTML = html || '<div style="color:var(--muted)">No artifacts found</div>';
+    } else if (wf === 'planning') {
+      const [patterns, arch, tasks, validation] = await Promise.all([
+        api('GET', `/projects/${state.projectId}/runs/${runId}/artifacts/selected_patterns.json`).catch(() => null),
+        api('GET', `/projects/${state.projectId}/runs/${runId}/artifacts/architecture.json`).catch(() => null),
+        api('GET', `/projects/${state.projectId}/runs/${runId}/artifacts/task_plan.json`).catch(() => null),
+        api('GET', `/projects/${state.projectId}/runs/${runId}/artifacts/task_validation.json`).catch(() => null),
+      ]);
+      let html = '<div class="plan-summary">';
+      if (validation) {
+        const score = validation.score || 0;
+        html += `<div class="plan-section"><h4>Validation</h4><div class="validation-summary"><div class="score ${score >= 70 ? 'pass' : 'fail'}">${score}/100</div><div>${validation.passed ? '✓ Passed' : '✗ Failed'}</div></div></div>`;
+      }
+      if (patterns) {
+        html += `<div class="plan-section"><h4>Selected Patterns</h4><pre>${esc(JSON.stringify(patterns, null, 2).substring(0, 2000))}</pre></div>`;
+      }
+      if (arch) {
+        html += `<div class="plan-section"><h4>Architecture</h4><pre>${esc(JSON.stringify(arch, null, 2).substring(0, 2000))}</pre></div>`;
+      }
+      if (tasks && tasks.tasks) {
+        html += `<div class="plan-section"><h4>Tasks (${tasks.tasks.length})</h4><ul class="task-list">`;
+        tasks.tasks.forEach(t => { html += `<li><strong>${esc(t.task_id || t.id || '')}</strong> ${esc(t.title || '')}</li>`; });
+        html += `</ul></div>`;
+      }
+      html += '</div>';
+      container.innerHTML = html || '<div style="color:var(--muted)">No artifacts found</div>';
+    } else if (wf === 'codegen') {
+      const files = await api('GET', `/projects/${state.projectId}/runs/${runId}/artifacts/workspace_files.json`).catch(() => null);
+      let html = '';
+      if (files && files.files) {
+        html += `<div class="req-section"><h4>Generated Files (${files.files.length})</h4><ul class="file-tree">`;
+        files.files.forEach(f => { html += `<li><span class="file-icon">📄</span>${esc(f.path || f.filename || '')}</li>`; });
+        html += `</ul></div>`;
+      }
+      container.innerHTML = html || '<div style="color:var(--muted)">No files generated yet</div>';
+    }
+  } catch (e) { container.innerHTML = `<div style="color:var(--danger);font-size:12px">Error loading preview</div>`; }
+}
+
+// ── Workflow Trigger ──
+async function triggerWorkflow(wf) {
+  try {
+    const r = await api('POST', `/projects/${state.projectId}/workflows/${wf}`, {});
+    const wfState = wf === 'requirements' ? state.wf1 : wf === 'planning' ? state.wf2 : state.wf3;
+    wfState.runId = r.id;
+    wfState.runStatus = r.status;
+    wfState.currentNode = null;
+    graphNodeStates[r.id] = {};
+    _nodeStates[r.id] = {};
+    showOutput('triggerOutput', r);
+
+    const wfKey = wf === 'requirements' ? 'Req' : wf === 'planning' ? 'Plan' : 'Code';
+    document.getElementById('wfStatus' + wfKey).className = 'wf-status active';
+
+    connectSSE(state.projectId, r.id, wf);
+    startPolling(wf, r.id);
+    renderGraph(wf);
+  } catch (e) { showOutput('triggerOutput', e, true); }
+}
+
+// ── SSE ──
+function connectSSE(projectId, runId, wf) {
+  if (_sseConnections[runId]) return;
+  const es = new EventSource(`${API}/projects/${projectId}/runs/${runId}/events`);
+  _sseConnections[runId] = es;
+
+  es.onmessage = function(e) {
+    try {
+      const parsed = JSON.parse(e.data);
+      if (parsed.event_type === 'node_state_captured') {
+        const nodeName = parsed.data?.node_name || parsed.node_name;
+        if (nodeName) {
+          if (!_nodeStates[runId]) _nodeStates[runId] = {};
+          _nodeStates[runId][nodeName] = parsed.data;
+          updateGraphNode(runId, nodeName, 'done');
+        }
+      } else if (parsed.event_type === 'approval_requested' || parsed.event_type === 'clarification_requested') {
+        const nodeName = parsed.data?.node_name || parsed.node_name || 'approval';
+        if (!_nodeStates[runId]) _nodeStates[runId] = {};
+        graphNodeStates[runId] = graphNodeStates[runId] || {};
+        graphNodeStates[runId][nodeName] = 'awaiting';
+        updateGraphNode(runId, nodeName, 'awaiting');
+      } else if (parsed.event_type === 'run_started' || parsed.event_type === 'node_started') {
+        const nodeName = parsed.data?.node_name || parsed.node_name;
+        if (nodeName) {
+          graphNodeStates[runId] = graphNodeStates[runId] || {};
+          graphNodeStates[runId][nodeName] = 'active';
+          updateGraphNode(runId, nodeName, 'active');
+        }
+      } else if (parsed.event_type === 'node_completed') {
+        const nodeName = parsed.data?.node_name || parsed.node_name;
+        if (nodeName) {
+          graphNodeStates[runId] = graphNodeStates[runId] || {};
+          graphNodeStates[runId][nodeName] = 'done';
+          updateGraphNode(runId, nodeName, 'done');
+        }
+      }
+    } catch (err) {}
+  };
+
+  es.onerror = function() { es.close(); delete _sseConnections[runId]; };
+}
+
+// ── Polling ──
+function startPolling(wf, runId) {
+  if (_pollIntervals[wf]) clearInterval(_pollIntervals[wf]);
+  _pollIntervals[wf] = setInterval(() => pollRunStatus(wf, runId), 3000);
+  pollRunStatus(wf, runId);
+}
+
+async function pollRunStatus(wf, runId) {
+  try {
+    const r = await api('GET', `/projects/${state.projectId}/runs/${runId}`);
+    const wfState = wf === 'requirements' ? state.wf1 : wf === 'planning' ? state.wf2 : state.wf3;
+    wfState.runStatus = r.status;
+    wfState.currentNode = r.current_node;
+
+    const wfKey = wf === 'requirements' ? 'Req' : wf === 'planning' ? 'Plan' : 'Code';
+    const statusEl = document.getElementById('wfStatus' + wfKey);
+
+    document.getElementById('runStatusText').textContent = `${wf}: ${r.status} (${r.current_node || 'n/a'})`;
+
+    if (r.status === 'completed') {
+      statusEl.className = 'wf-status done';
+      clearInterval(_pollIntervals[wf]);
+      markAllNodesDone(wf, runId);
+    } else if (r.status === 'failed') {
+      statusEl.className = 'wf-status error';
+      clearInterval(_pollIntervals[wf]);
+      document.getElementById('runDot').className = 'dot';
+    } else if (r.status === 'awaiting_human') {
+      statusEl.className = 'wf-status active';
+      document.getElementById('runDot').className = 'dot on';
+      if (r.current_node) {
+        graphNodeStates[runId] = graphNodeStates[runId] || {};
+        graphNodeStates[runId][r.current_node] = 'awaiting';
+        updateGraphNode(runId, r.current_node, 'awaiting');
+      }
+    } else {
+      statusEl.className = 'wf-status active';
+      document.getElementById('runDot').className = 'dot on';
+    }
+
+    if (r.status !== 'completed' && r.status !== 'failed' && r.status !== 'awaiting_human') {
+      if (r.current_node) {
+        graphNodeStates[runId] = graphNodeStates[runId] || {};
+        graphNodeStates[runId][r.current_node] = 'active';
+        updateGraphNode(runId, r.current_node, 'active');
+      }
+    }
+
+    if (wf === state.currentWorkflow) renderGraph(wf);
+  } catch (e) {}
+}
+
+function markAllNodesDone(wf, runId) {
+  graphWorkflows[wf].nodes.forEach(n => {
+    graphNodeStates[runId] = graphNodeStates[runId] || {};
+    graphNodeStates[runId][n.id] = 'done';
+  });
+  if (wf === state.currentWorkflow) renderGraph(wf);
+}
+
+// ── Window resize ──
+window.addEventListener('resize', () => {
+  const wf = state.currentWorkflow;
+  const runId = wf === 'requirements' ? state.wf1.runId : wf === 'planning' ? state.wf2.runId : state.wf3.runId;
+  renderEdges(wf, runId);
+});
+
+// ── Init ──
+renderGraph('requirements');
+</script>
+</body>
+</html>

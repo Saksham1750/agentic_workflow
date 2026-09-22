@@ -52,6 +52,9 @@ async def seed_patterns():
                 strengths=p_data.get("strengths"),
                 weaknesses=p_data.get("weaknesses"),
                 example_use_case=p_data.get("example_use_case"),
+                when_not_to_use=p_data.get("when_not_to_use"),
+                prerequisites=p_data.get("prerequisites"),
+                references=p_data.get("references"),
                 tags=p_data.get("tags"),
             )
             db.add(pattern)

@@ -93,6 +93,7 @@ class DeveloperAgent:
         architecture_json = state.get("architecture_json") or {}
         selected_patterns = state.get("selected_patterns") or []
         review_feedback = state.get("review_feedback")
+        human_feedback = state.get("feedback")
         existing_files = state.get("workspace_files") or []
 
         run_id = state.get("run_id", "")
@@ -102,12 +103,13 @@ class DeveloperAgent:
             result = await self._generate_with_llm(
                 current_task, requirements_md, architecture_json,
                 selected_patterns, review_feedback, existing_files,
-                run_id=run_id, project_id=project_id,
+                human_feedback=human_feedback, run_id=run_id, project_id=project_id,
             )
         else:
             result = self._generate_without_llm(
                 current_task, requirements_md, architecture_json,
                 selected_patterns, review_feedback, existing_files,
+                human_feedback=human_feedback,
             )
 
         generated_files = result.get("files", [])
@@ -134,6 +136,7 @@ class DeveloperAgent:
         selected_patterns: list[dict],
         review_feedback: str | None,
         existing_files: list[dict],
+        human_feedback: str | None = None,
         run_id: str = "",
         project_id: str = "",
     ) -> dict:
@@ -156,6 +159,10 @@ class DeveloperAgent:
         if review_feedback:
             feedback_context = f"\n## REVIEW FEEDBACK (you MUST fix these issues)\n{review_feedback}\n"
 
+        human_feedback_context = ""
+        if human_feedback:
+            human_feedback_context = f"\n## HUMAN REJECTION FEEDBACK (you MUST address this)\nThe previous code was rejected by the human reviewer with the following feedback:\n{human_feedback}\nRevise the implementation to address these concerns.\n"
+
         user_message = f"""## CURRENT TASK
 Title: {task.get('title', '')}
 Description: {task.get('description', '')}
@@ -171,6 +178,7 @@ Pattern References: {json.dumps(task.get('pattern_refs', [])) if task.get('patte
 {requirements_md[:3000]}
 {existing_files_section}
 {feedback_context}
+{human_feedback_context}
 
 ## INSTRUCTIONS
 Generate COMPLETE, RUNNABLE Python code for this task. Every file must:
@@ -204,6 +212,7 @@ Return JSON with the files array."""
             return self._generate_without_llm(
                 task, requirements_md, architecture_json,
                 selected_patterns, review_feedback, existing_files,
+                human_feedback=human_feedback,
             )
 
     def _generate_without_llm(
@@ -214,6 +223,7 @@ Return JSON with the files array."""
         selected_patterns: list[dict],
         review_feedback: str | None,
         existing_files: list[dict],
+        human_feedback: str | None = None,
     ) -> dict:
         title = task.get("title", "Untitled Task")
         description = task.get("description", "")

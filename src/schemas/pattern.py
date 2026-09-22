@@ -10,6 +10,9 @@ class PatternCreate(BaseModel):
     strengths: str | None = None
     weaknesses: str | None = None
     example_use_case: str | None = None
+    when_not_to_use: str | None = None
+    prerequisites: str | None = None
+    references: str | None = None
     tags: list[str] | None = None
 
 
@@ -21,6 +24,9 @@ class PatternUpdate(BaseModel):
     strengths: str | None = None
     weaknesses: str | None = None
     example_use_case: str | None = None
+    when_not_to_use: str | None = None
+    prerequisites: str | None = None
+    references: str | None = None
     tags: list[str] | None = None
 
 
@@ -33,6 +39,9 @@ class PatternResponse(BaseModel):
     strengths: str | None
     weaknesses: str | None
     example_use_case: str | None
+    when_not_to_use: str | None
+    prerequisites: str | None
+    references: str | None
     tags: list[str] | None
     version: int
     created_at: datetime

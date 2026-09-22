@@ -27,6 +27,12 @@ class PatternService:
             parts.append(f"Weaknesses: {pattern.weaknesses}")
         if pattern.example_use_case:
             parts.append(f"Example: {pattern.example_use_case}")
+        if pattern.when_not_to_use:
+            parts.append(f"When not to use: {pattern.when_not_to_use}")
+        if pattern.prerequisites:
+            parts.append(f"Prerequisites: {pattern.prerequisites}")
+        if pattern.references:
+            parts.append(f"References: {pattern.references}")
         if pattern.tags:
             parts.append(f"Tags: {', '.join(pattern.tags)}")
         return "\n".join(parts)

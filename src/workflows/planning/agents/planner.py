@@ -61,17 +61,19 @@ class PlannerAgent:
         requirements_json = state.get("requirements_json", {})
         architecture_json = state.get("architecture_json", {})
         selected_patterns = state.get("selected_patterns", [])
+        feedback = state.get("feedback")
         run_id = state.get("run_id", "")
         project_id = state.get("project_id", "")
 
         if self.llm:
             result = await self._plan_with_llm(
                 requirements_json, architecture_json, selected_patterns,
-                run_id=run_id, project_id=project_id,
+                feedback=feedback, run_id=run_id, project_id=project_id,
             )
         else:
             result = self._plan_without_llm(
-                requirements_json, architecture_json, selected_patterns
+                requirements_json, architecture_json, selected_patterns,
+                feedback=feedback,
             )
 
         return {
@@ -84,9 +86,20 @@ class PlannerAgent:
         requirements_json: dict,
         architecture_json: dict,
         selected_patterns: list[dict],
+        feedback: str | None = None,
         run_id: str = "",
         project_id: str = "",
     ) -> dict:
+        feedback_section = ""
+        if feedback:
+            feedback_section = f"""
+
+## HUMAN REJECTION FEEDBACK (you MUST address this)
+The previous plan was rejected by the human reviewer with the following feedback:
+{feedback}
+
+Revise the plan to address these concerns. Do NOT repeat the same plan."""
+
         user_message = f"""## Requirements
 {json.dumps(requirements_json, indent=2)[:2000]}
 
@@ -95,6 +108,7 @@ class PlannerAgent:
 
 ## Selected Patterns
 {json.dumps(selected_patterns, indent=2)[:1000]}
+{feedback_section}
 
 ## Task
 Create an ordered task list. Return JSON with tasks array."""
@@ -117,13 +131,14 @@ Create an ordered task list. Return JSON with tasks array."""
             return json.loads(content.strip())
         except Exception as e:
             logger.warning("LLM planning failed, using fallback: %s", e)
-            return self._plan_without_llm(requirements_json, architecture_json, selected_patterns)
+            return self._plan_without_llm(requirements_json, architecture_json, selected_patterns, feedback=feedback)
 
     def _plan_without_llm(
         self,
         requirements_json: dict,
         architecture_json: dict,
         selected_patterns: list[dict],
+        feedback: str | None = None,
     ) -> dict:
         frs = requirements_json.get("functional_requirements", [])
         components = architecture_json.get("components", [])
@@ -131,6 +146,22 @@ Create an ordered task list. Return JSON with tasks array."""
 
         tasks = []
         task_id = 1
+
+        if feedback:
+            tasks.append({
+                "task_id": f"task_{task_id:03d}",
+                "title": "Address Review Feedback",
+                "description": f"Incorporate the following human feedback into the implementation: {feedback}",
+                "target_files": [],
+                "acceptance_criteria": [
+                    "All feedback concerns addressed",
+                    "Changes verified against original feedback",
+                ],
+                "dependencies": [],
+                "pattern_refs": [],
+                "estimated_complexity": "medium",
+            })
+            task_id += 1
 
         tasks.append({
             "task_id": f"task_{task_id:03d}",

@@ -25,6 +25,7 @@ class PlanningState(TypedDict):
     current_phase: str
     iteration_count: int
     max_iterations: int
+    project_type: str | None
     feedback: str | None
     error: str | None
     approval_result: dict | None

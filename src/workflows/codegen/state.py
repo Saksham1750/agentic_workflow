@@ -17,6 +17,7 @@ class CodegenState(TypedDict):
     workspace_files: list[dict]
     review_results: list[dict]
     review_feedback: str | None
+    feedback: str | None
 
     current_phase: str
     iteration_count: int

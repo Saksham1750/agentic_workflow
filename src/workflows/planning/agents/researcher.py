@@ -68,10 +68,11 @@ class ResearcherAgent:
         project_id = state.get("project_id", "")
         requirements_json = state.get("requirements_json", {})
         selected_patterns = state.get("selected_patterns", [])
+        project_type = state.get("project_type", "traditional")
         run_id = state.get("run_id", "")
 
         doc_findings = await self._research_documents(project_id, requirements_json)
-        kb_findings = await self._research_knowledge_base(requirements_json, selected_patterns)
+        kb_findings = await self._research_knowledge_base(requirements_json, selected_patterns, project_type)
         web_findings = await self._research_web(requirements_json)
 
         all_findings = doc_findings + kb_findings + web_findings
@@ -124,14 +125,27 @@ class ResearcherAgent:
         self,
         requirements_json: dict,
         selected_patterns: list[dict],
+        project_type: str = "traditional",
     ) -> list[dict]:
         findings = []
         try:
             pattern_names = [p.get("name", "") for p in selected_patterns]
-            query = " ".join(pattern_names)[:200] if pattern_names else "agentic design patterns"
+            if pattern_names:
+                query = " ".join(pattern_names)[:200]
+            elif project_type == "agentic":
+                query = "agentic design patterns"
+            else:
+                query = "software architecture patterns best practices"
+
+            tags = None
+            if project_type == "agentic":
+                tags = ["agentic"]
+            elif project_type == "traditional":
+                tags = ["backend", "frontend", "database", "api", "deployment"]
 
             results = await pattern_service.search_patterns(
                 query=query,
+                tags=tags,
                 n_results=5,
             )
 

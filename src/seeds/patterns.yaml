@@ -314,3 +314,778 @@ patterns:
       - pipeline
       - simple
       - chaining
+
+  # ===== NON-AGENTIC: Backend Architecture Patterns =====
+
+  - name: "MVC (Model-View-Controller)"
+    intent: "Separate application into three interconnected components: Model (data), View (UI), and Controller (logic)."
+    structure: >
+      Three layers: (1) Model — handles data, business logic, and database
+      interactions; (2) View — renders the user interface and displays data;
+      (3) Controller — receives user input, validates it, and coordinates
+      between Model and View. HTTP requests flow through Controller to Model
+      and back through View.
+    when_to_use: >
+      Use for web applications with clear separation between data, business
+      logic, and presentation. Ideal for CRUD applications, content
+      management systems, and standard web backends.
+    strengths: >
+      Clear separation of concerns; easy to test individual components;
+      multiple views can share one model; well-understood pattern with
+      extensive framework support.
+    weaknesses: >
+      Can become complex for large applications; tight coupling between
+      layers if not carefully designed; may add overhead for simple apps.
+    example_use_case: >
+      A blog platform where the Model handles posts and comments, the View
+      renders HTML pages, and the Controller handles URL routing and form
+      submissions.
+    when_not_to_use: >
+      Avoid for real-time applications requiring WebSocket connections,
+      simple static sites, or applications with minimal business logic.
+    prerequisites: >
+      A web framework that supports MVC (Django, Rails, Laravel, Express).
+    references: >
+      https://martinfowler.com/eaaArchitecturalPatterns.html
+    tags:
+      - backend
+      - mvc
+      - traditional
+      - web
+      - rest-api
+
+  - name: "Layered Architecture"
+    intent: "Organize the system into horizontal layers, each with a specific responsibility, where layers only depend on the one below."
+    structure: >
+      Four or more layers: (1) Presentation Layer — UI and API endpoints;
+      (2) Business Logic Layer — application rules and workflows; (3) Data
+      Access Layer — database operations and ORM; (4) Data Storage Layer —
+      database and file systems. Each layer only depends on the layer
+      directly below it.
+    when_to_use: >
+      Use for enterprise applications, business software, and systems
+      where clear separation between concerns is critical. Works well
+      with relational databases and traditional deployment models.
+    strengths: >
+      Easy to understand and implement; clear responsibility boundaries;
+      layers can be developed independently; easy to swap implementations
+      (e.g., different databases) by changing only the data layer.
+    weaknesses: >
+      Performance overhead from layer-to-layer calls; may become rigid
+      for complex domain logic; N+1 query patterns can emerge; may not
+      suit highly distributed systems.
+    example_use_case: >
+      An enterprise HR system with a web frontend, REST API layer,
+      business rules engine, and PostgreSQL database.
+    when_not_to_use: >
+      Avoid for microservices architectures, event-driven systems, or
+      applications requiring low-latency cross-cutting concerns.
+    prerequisites: >
+      Clear domain boundaries and a relational database backend.
+    references: >
+      https://docs.microsoft.com/en-us/dotnet/architecture/modern-web-apps-azure/common-web-application-architectures
+    tags:
+      - backend
+      - layered
+      - traditional
+      - n-tier
+      - enterprise
+
+  - name: "Microservices"
+    intent: "Decompose the application into small, independently deployable services, each owning its own data and business logic."
+    structure: >
+      Multiple independent services: (1) Each service is a small, focused
+      application with its own database; (2) Services communicate via
+      APIs (REST, gRPC) or messaging (Kafka, RabbitMQ); (3) API Gateway
+      handles routing, authentication, and rate limiting; (4) Each service
+      can be developed, deployed, and scaled independently.
+    when_to_use: >
+      Use for large-scale applications requiring independent scaling,
+      technology diversity, and team autonomy. Ideal for complex domains
+      with clear bounded contexts.
+    strengths: >
+      Independent deployment and scaling; technology diversity per service;
+      fault isolation; team autonomy; easier to understand individual
+      services.
+    weaknesses: >
+      Distributed system complexity; data consistency challenges; network
+      latency; requires DevOps maturity; monitoring and debugging harder.
+    example_use_case: >
+      An e-commerce platform with separate services for inventory,
+      orders, payments, user management, and notifications.
+    when_not_to_use: >
+      Avoid for small teams, simple applications, or systems without
+      DevOps infrastructure. Not suitable for tightly coupled domains.
+    prerequisites: >
+      Container orchestration (Kubernetes), service discovery, centralized
+      logging, and distributed tracing infrastructure.
+    references: >
+      https://microservices.io/patterns/microservices.html
+    tags:
+      - backend
+      - microservices
+      - distributed
+      - scalability
+      - cloud
+
+  - name: "Event-Driven Architecture"
+    intent: "Decouple components by communicating through events — facts about things that happened — rather than direct calls."
+    structure: >
+      Event producers emit events to a message broker or event bus;
+      event consumers subscribe to relevant events and react
+      asynchronously. Components: (1) Event Producers — generate events;
+      (2) Event Channel/Broker — routes events (Kafka, RabbitMQ); (3)
+      Event Consumers — process events and update state; (4) Event Store
+      — optional persistence for event replay.
+    when_to_use: >
+      Use for real-time systems, applications requiring loose coupling,
+      audit trails, or event sourcing. Ideal for IoT, financial systems,
+      and notification platforms.
+    strengths: >
+      Loose coupling between components; natural audit trail; real-time
+      processing; easy to add new consumers; supports event replay and
+      debugging.
+    weaknesses: >
+      Eventual consistency complexity; harder to trace data flow;
+      message ordering challenges; requires infrastructure for reliable
+      delivery.
+    example_use_case: >
+      A stock trading platform where price updates, order placements,
+      and trade executions are all events flowing through a message bus.
+    when_not_to_use: >
+      Avoid for simple CRUD applications, systems requiring strong
+      consistency, or small-scale apps without messaging infrastructure.
+    prerequisites: >
+      Message broker (Kafka, RabbitMQ, Redis Streams), event schema
+      registry, and consumer idempotency mechanisms.
+    references: >
+      https://aws.amazon.com/event-driven-architecture/
+    tags:
+      - backend
+      - event-driven
+      - async
+      - messaging
+      - real-time
+
+  - name: "CQRS (Command Query Responsibility Segregation)"
+    intent: "Separate read and write operations into different models, optimizing each for its specific purpose."
+    structure: >
+      Two separate models: (1) Command Model — handles writes, validates
+      business rules, and updates the write database; (2) Query Model —
+      optimized for reads, may use denormalized views or read replicas.
+      Events or synchronization keep the models in sync.
+    when_to_use: >
+      Use for systems with vastly different read and write patterns,
+      high-read/low-write or high-write/low-read scenarios, and
+      applications requiring audit trails and temporal queries.
+    strengths: >
+      Optimized read and write models independently; better performance
+      for complex queries; clear audit trail; scales reads and writes
+      separately.
+    weaknesses: >
+      Increased complexity; eventual consistency between read/write
+      models; requires synchronization mechanism; more infrastructure.
+    example_use_case: >
+      A social media feed system where writes (posts) are infrequent but
+      reads (feed queries) are extremely high volume and complex.
+    when_not_to_use: >
+      Avoid for simple CRUD apps with balanced read/write ratios, or
+      systems where strong consistency is required.
+    prerequisites: >
+      Separate read and write databases or views, event bus for
+      synchronization, and clear domain boundaries.
+    references: >
+      https://martinfowler.com/bliki/CQRS.html
+    tags:
+      - backend
+      - cqrs
+      - database
+      - scaling
+      - enterprise
+
+  - name: "Serverless"
+    intent: "Run application logic as ephemeral functions triggered by events, without managing servers."
+    structure: >
+      Function-as-a-Service (FaaS): (1) Functions — small, stateless
+      units of code triggered by HTTP, events, or schedules; (2) API
+      Gateway — routes requests to functions; (3) Managed Services —
+      databases, queues, storage provided as managed cloud services;
+      (4) Event Triggers — S3 uploads, queue messages, cron schedules.
+    when_to_use: >
+      Use for event-driven workloads, APIs with variable traffic,
+      data processing pipelines, and prototypes. Ideal for teams wanting
+      to focus on code without infrastructure management.
+    strengths: >
+      No server management; auto-scaling; pay-per-use pricing; fast
+      deployment; ideal for event-driven and async workloads.
+    weaknesses: >
+      Cold start latency; vendor lock-in; limited execution time;
+      debugging complexity; state management challenges.
+    example_use_case: >
+      An image processing service where uploaded images trigger resize
+      functions, which store thumbnails in cloud storage.
+    when_not_to_use: >
+      Avoid for long-running processes, applications requiring persistent
+      connections (WebSockets), or systems needing predictable latency.
+    prerequisites: >
+      Cloud provider (AWS Lambda, Azure Functions, Google Cloud Functions),
+      managed services for state, and understanding of FaaS limitations.
+    references: >
+      https://serverlessland.com/patterns
+    tags:
+      - backend
+      - serverless
+      - faas
+      - cloud
+      - event-driven
+
+  - name: "API Gateway"
+    intent: "Provide a single entry point for all client requests, handling routing, authentication, rate limiting, and protocol translation."
+    structure: >
+      Central gateway: (1) Client sends request to API Gateway; (2)
+      Gateway authenticates, rate-limits, and routes to appropriate
+      backend service; (3) Backend processes request and returns response;
+      (4) Gateway may transform request/response formats. Supports
+      REST, GraphQL, gRPC, and WebSocket protocols.
+    when_to_use: >
+      Use for microservices architectures, mobile backends, and systems
+      requiring centralized cross-cutting concerns (auth, rate limiting,
+      logging).
+    strengths: >
+      Centralized authentication and rate limiting; protocol translation;
+      request/response transformation; single point for monitoring;
+      decouples clients from backend services.
+    weaknesses: >
+      Single point of failure; potential bottleneck; adds latency; complex
+      configuration; may hide backend service details.
+    example_use_case: >
+      A mobile app backend where the gateway handles auth, routes to
+      different microservices, and translates between mobile-optimized
+      and internal APIs.
+    when_not_to_use: >
+      Avoid for simple single-service architectures, applications
+      requiring direct client-to-service communication, or systems
+      with very low latency requirements.
+    prerequisites: >
+      Gateway implementation (Kong, AWS API Gateway, Nginx) and backend
+      services with clear API contracts.
+    references: >
+      https://microservices.io/patterns/apigateway.html
+    tags:
+      - backend
+      - api-gateway
+      - routing
+      - microservices
+      - cloud
+
+  - name: "Saga Pattern"
+    intent: "Manage distributed transactions across multiple services by defining a sequence of local transactions with compensating actions for rollback."
+    structure: >
+      Two variants: (1) Choreography — each service publishes events that
+      trigger the next step; (2) Orchestration — a central orchestrator
+      coordinates the sequence. Each step has a compensating transaction
+      that undoes its effects if a later step fails.
+    when_to_use: >
+      Use for distributed transactions across microservices where ACID
+      transactions are not possible. Ideal for order processing, booking
+      systems, and multi-service workflows.
+    strengths: >
+      Maintains data consistency across services; handles failures
+      gracefully; no distributed locks; each service remains independent.
+    weaknesses: >
+      Complex implementation; compensating transactions can be hard to
+      design; debugging distributed flows is difficult; eventual
+      consistency.
+    example_use_case: >
+      An airline booking system: reserve flight → book hotel → charge
+      payment. If payment fails, cancel hotel and release flight.
+    when_not_to_use: >
+      Avoid for single-service transactions, simple CRUD operations, or
+      systems where two-phase commit is acceptable.
+    prerequisites: >
+      Event-driven infrastructure, idempotent operations, and clearly
+      defined compensating transactions for each step.
+    references: >
+      https://microservices.io/patterns/data/saga.html
+    tags:
+      - backend
+      - saga
+      - distributed-transactions
+      - event-driven
+      - microservices
+
+  # ===== NON-AGENTIC: Database Patterns =====
+
+  - name: "Repository Pattern"
+    intent: "Abstract data access behind an interface, so business logic doesn't depend on specific database implementations."
+    structure: >
+      Repository interface defines CRUD operations and queries; concrete
+      implementations handle specific database access (SQL, NoSQL, file
+      system). Business logic calls repository methods, never direct
+      database queries. Repositories can be swapped without changing
+      business logic.
+    when_to_use: >
+      Use when business logic should be independent of data storage
+      technology. Ideal for testing (mock repositories), multi-database
+      support, and clean architecture implementations.
+    strengths: >
+      Decouples business logic from data access; easy to test with mock
+      repositories; swappable database backends; centralizes data access
+      logic.
+    weaknesses: >
+      Can become a "leaky abstraction" for complex queries; may add
+      overhead for simple CRUD; requires interface design decisions.
+    example_use_case: >
+      An e-commerce app with UserRepository, ProductRepository, and
+      OrderRepository that abstract MongoDB access, allowing easy
+      migration to PostgreSQL.
+    when_not_to_use: >
+      Avoid for simple prototypes, scripts, or applications with a single
+      data source and no testing requirements.
+    prerequisites: >
+      An ORM or database abstraction layer, and clear domain model.
+    references: >
+      https://martinfowler.com/eaaCatalog/repository.html
+    tags:
+      - database
+      - repository
+      - abstraction
+      - traditional
+      - clean-architecture
+
+  - name: "Unit of Work"
+    intent: "Track changes to objects and commit them as a single transaction, ensuring data consistency."
+    structure: >
+      Unit of Work object tracks all object changes (inserts, updates,
+      deletes) during a business operation. When the operation completes,
+      Commit() persists all changes in a single transaction. Supports
+      rollback if any step fails. Often combined with Repository pattern.
+    when_to_use: >
+      Use when multiple related database operations must be atomic.
+      Ideal for complex business operations that modify multiple tables
+      and require transactional consistency.
+    strengths: >
+      Atomic transactions across multiple operations; reduces database
+      round trips; automatic change tracking; rollback support.
+    weaknesses: >
+      Adds complexity; may hold database connections longer; requires
+      careful transaction scope management; can be overkill for simple
+      operations.
+    example_use_case: >
+      An order placement that must atomically create the order, update
+      inventory, and record payment — all in one transaction.
+    when_not_to_use: >
+      Avoid for single-table operations, read-only applications, or
+      systems where eventual consistency is acceptable.
+    prerequisites: >
+      Transactional database support and a domain model with clear
+      aggregate boundaries.
+    references: >
+      https://martinfowler.com/eaaCatalog/unitOfWork.html
+    tags:
+      - database
+      - unit-of-work
+      - transactions
+      - traditional
+      - clean-architecture
+
+  - name: "Data Mapper"
+    intent: "Map between in-memory objects and database tables, keeping the domain model persistence-ignorant."
+    structure: >
+      Data Mapper handles the translation between object attributes and
+      database columns. Domain objects have no knowledge of the database.
+      The mapper performs SELECT, INSERT, UPDATE, and DELETE operations,
+      translating between the two representations. Supports complex
+      mappings, inheritance, and relationships.
+    when_to_use: >
+      Use for complex domain models with rich business logic. Ideal for
+      enterprise applications, domain-driven design, and systems where
+      the domain model should not be polluted with persistence concerns.
+    strengths: >
+      Domain model stays clean and persistence-ignorant; supports complex
+      mappings and relationships; enables rich domain models; testable.
+    weaknesses: >
+      More complex than Active Record; requires mapping configuration;
+      may have performance overhead for simple operations.
+    example_use_case: >
+      A healthcare system where Patient, Appointment, and MedicalRecord
+      domain objects are mapped to database tables by separate mapper
+      classes.
+    when_not_to_use: >
+      Avoid for simple applications with straightforward data models,
+      rapid prototypes, or when Active Record is sufficient.
+    prerequisites: >
+      An ORM framework (SQLAlchemy, Hibernate, Entity Framework) or
+      custom mapper implementation.
+    references: >
+      https://martinfowler.com/eaaCatalog/dataMapper.html
+    tags:
+      - database
+      - data-mapper
+      - orm
+      - traditional
+      - clean-architecture
+
+  - name: "Active Record"
+    intent: "Encapsulate database access and business logic in the same object, where each record knows how to persist itself."
+    structure: >
+      Each domain object (Active Record) contains both data attributes
+      and database methods (save, delete, find). The object knows how to
+      map itself to a database table. Queries are often class methods
+      that return instances of the class.
+    when_to_use: >
+      Use for simple applications with straightforward data models.
+      Ideal for rapid development, small teams, and CRUD-heavy apps
+      where the simplicity of having data and behavior in one place
+      outweighs separation of concerns.
+    strengths: >
+      Simple and intuitive; rapid development; less boilerplate; easy to
+      understand for small applications; framework support (Django ORM,
+      Rails ActiveRecord).
+    weaknesses: >
+      Mixes concerns (data + logic); hard to test; doesn't scale well
+      for complex domains; makes it harder to change data access patterns.
+    example_use_case: >
+      A simple blog where the Post model has methods like save(), delete(),
+      and find_by_author() that directly interact with the database.
+    when_not_to_use: >
+      Avoid for complex business logic, applications requiring multiple
+      data sources, or when domain-driven design principles are needed.
+    prerequisites: >
+      A framework with Active Record support or a simple database schema.
+    references: >
+      https://martinfowler.com/eaaCatalog/activeRecord.html
+    tags:
+      - database
+      - active-record
+      - orm
+      - simple
+      - rapid-development
+
+  # ===== NON-AGENTIC: API Patterns =====
+
+  - name: "REST API"
+    intent: "Design APIs using HTTP methods and resource-oriented URLs for stateless client-server communication."
+    structure: >
+      Resources are identified by URLs; HTTP methods map to CRUD
+      operations (GET=read, POST=create, PUT=update, DELETE=remove).
+      Responses use standard HTTP status codes. Statelessness means each
+      request contains all information needed. Supports JSON, XML, and
+      other formats. HATEOAS links enable discoverability.
+    when_to_use: >
+      Use for web APIs, mobile backends, and integration between systems.
+      Ideal when simplicity, cacheability, and broad tool support are
+      important.
+    strengths: >
+      Simple and widely understood; cacheable; stateless; broad tool
+      support; works with any HTTP client; well-documented with OpenAPI.
+    weaknesses: >
+      Not ideal for real-time applications; can lead to over-fetching or
+      under-fetching; versioning complexity; less efficient than gRPC
+      for internal communication.
+    example_use_case: >
+      A social media API with endpoints like /users, /posts, /comments
+      supporting standard CRUD operations.
+    when_not_to_use: >
+      Avoid for real-time bidirectional communication, high-performance
+      internal service communication, or complex query requirements
+      (consider GraphQL).
+    prerequisites: >
+      HTTP server framework, content negotiation strategy, and API
+      versioning plan.
+    references: >
+      https://restfulapi.net/
+    tags:
+      - api
+      - rest
+      - http
+      - traditional
+      - web
+
+  - name: "GraphQL"
+    intent: "Provide a flexible query language for APIs where clients request exactly the data they need."
+    structure: >
+      Single endpoint accepts queries (read) and mutations (write).
+      Schema defines types and relationships. Clients specify exactly
+      which fields they need in each query. Resolvers handle data
+      fetching for each field. Supports subscriptions for real-time
+      updates.
+    when_to_use: >
+      Use when clients need flexible data fetching, when API consumers
+      have different data needs, or when over/under-fetching is a problem
+      with REST. Ideal for mobile apps with bandwidth constraints.
+    strengths: >
+      Client-specified data; no over/under-fetching; strong type system;
+      introspection and tooling; single endpoint; real-time subscriptions.
+    weaknesses: >
+      More complex server implementation; caching is harder; N+1 query
+      problems; learning curve; file upload requires additional handling.
+    example_use_case: >
+      A mobile app that needs user profiles with different fields for
+      the feed view vs. the profile detail view.
+    when_not_to_use: >
+      Avoid for simple CRUD APIs, when REST tooling is already in place,
+      or when response caching is critical.
+    prerequisites: >
+      GraphQL server (Apollo, Strawberry, Hasura), schema design, and
+      client-side query builder.
+    references: >
+      https://graphql.org/learn/
+    tags:
+      - api
+      - graphql
+      - query
+      - flexible
+      - frontend
+
+  - name: "gRPC"
+    intent: "Build high-performance APIs using Protocol Buffers and HTTP/2 for efficient binary communication."
+    structure: >
+      Services defined in .proto files with typed messages. Protocol
+      Buffers serialize data to binary format. HTTP/2 enables multiplexed
+      streams, header compression, and server push. Supports四种
+      communication patterns: unary, server streaming, client streaming,
+      and bidirectional streaming.
+    when_to_use: >
+      Use for internal microservice communication, high-performance APIs,
+      real-time streaming, and polyglot systems. Ideal when low latency
+      and high throughput are critical.
+    strengths: >
+      High performance (binary serialization); strongly typed contracts;
+      streaming support; code generation for multiple languages; efficient
+      over network.
+    weaknesses: >
+      Not browser-native; binary format not human-readable; requires
+      HTTP/2 support; harder to debug; less tooling than REST.
+    example_use_case: >
+      Inter-service communication in a microservices architecture where
+      services exchange high-frequency, structured messages.
+    when_not_to_use: >
+      Avoid for public APIs consumed by browsers, simple APIs with few
+      endpoints, or when human-readable payloads are needed.
+    prerequisites: >
+      Protobuf compiler, gRPC framework, HTTP/2 support, and service
+      mesh for production deployment.
+    references: >
+      https://grpc.io/docs/what-is-grpc/
+    tags:
+      - api
+      - grpc
+      - rpc
+      - high-performance
+      - microservices
+
+  # ===== NON-AGENTIC: Frontend Patterns =====
+
+  - name: "SPA (Single Page Application)"
+    intent: "Build a web application that loads a single HTML page and dynamically updates content via JavaScript."
+    structure: >
+      Initial page load downloads the full application (HTML, CSS, JS).
+      Client-side routing handles URL changes without full page reloads.
+      API calls fetch data dynamically. State managed in browser (Redux,
+      Zustand, Context). Components re-render on state changes.
+    when_to_use: >
+      Use for interactive web applications with rich user interfaces,
+      complex state management, and real-time updates. Ideal for
+      dashboards, admin panels, and modern web apps.
+    strengths: >
+      Smooth user experience; reduced server load; rich interactions;
+      offline capability possible; large ecosystem of frameworks.
+    weaknesses: >
+      SEO challenges; initial load time; browser memory usage; complex
+      state management; requires JavaScript.
+    example_use_case: >
+      A project management dashboard with drag-and-drop, real-time
+      updates, and complex filtering.
+    when_not_to_use: >
+      Avoid for content-heavy sites (blogs, marketing), SEO-critical
+      pages, or when JavaScript is disabled.
+    prerequisites: >
+      Frontend framework (React, Vue, Angular), build tooling, and
+      API backend.
+    references: >
+      https://martinfowler.com/plais SINGLE_PAGE_APPLICATION.html
+    tags:
+      - frontend
+      - spa
+      - browser
+      - traditional
+      - react
+
+  - name: "SSR (Server-Side Rendering)"
+    intent: "Render web pages on the server and send fully formed HTML to the client for faster initial load and better SEO."
+    structure: >
+      Server generates HTML for each request. Initial render is fast and
+      SEO-friendly. Client-side JavaScript "hydrates" the page for
+      interactivity. Subsequent navigation can be client-side. Supports
+      static generation (SSG) for even faster loads.
+    when_to_use: >
+      Use for content-heavy sites, SEO-critical pages, and applications
+      requiring fast first contentful paint. Ideal for e-commerce,
+      news sites, and marketing pages.
+    strengths: >
+      Fast initial load; excellent SEO; works without JavaScript;
+      better perceived performance; social media sharing works.
+    weaknesses: >
+      Higher server load; more complex setup; hydration overhead; state
+      transfer between server and client.
+    example_use_case: >
+      An e-commerce product catalog that needs to be SEO-indexed and
+      load quickly on slow connections.
+    when_not_to_use: >
+      Avoid for highly interactive dashboards, real-time collaborative
+      tools, or when server resources are limited.
+    prerequisites: >
+      SSR framework (Next.js, Nuxt, SvelteKit), server infrastructure,
+      and hydration strategy.
+    references: >
+      https://nextjs.org/docs/basic-features/pages
+    tags:
+      - frontend
+      - ssr
+      - seo
+      - performance
+      - web
+
+  - name: "Micro-Frontend"
+    intent: "Decompose a frontend application into independently developed, deployed, and scaled modules."
+    structure: >
+      Each micro-frontend is a self-contained application owned by a
+      separate team. They are composed at runtime using iframes, Web
+      Components, or a composition layer. Each can use different
+      frameworks. Shared concerns (auth, routing) handled by the shell.
+    when_to_use: >
+      Use for large-scale frontend applications with multiple teams,
+      when different parts need different technologies, or when
+      independent deployment is required.
+    strengths: >
+      Team autonomy; technology diversity; independent deployment;
+      fault isolation; parallel development.
+    weaknesses: >
+      Shared state complexity; inconsistent UX; routing conflicts;
+      bundle size overhead; operational complexity.
+    example_use_case: >
+      A large enterprise portal where different teams own the dashboard,
+      settings, reporting, and admin sections.
+    when_not_to_use: >
+      Avoid for small teams, simple applications, or when consistency
+      is more important than autonomy.
+    prerequisites: >
+      Composition infrastructure, shared design system, and team
+      coordination agreements.
+    references: >
+      https://micro-frontends.org/
+    tags:
+      - frontend
+      - micro-frontend
+      - modular
+      - scalable
+      - enterprise
+
+  - name: "BFF (Backend for Frontend)"
+    intent: "Create a dedicated backend service for each frontend client, tailored to its specific needs."
+    structure: >
+      Separate backend services for web, mobile, and other clients. Each
+      BFF handles client-specific concerns: data aggregation, format
+      transformation, authentication, and caching. The BFF calls shared
+      microservices and shapes the response for its client.
+    when_to_use: >
+      Use when different clients (web, iOS, Android) have different data
+      needs, or when a single API must serve multiple client types with
+      different performance requirements.
+    strengths: >
+      Client-optimized APIs; independent evolution per client; reduced
+      over-fetching; client-specific caching; simplified client code.
+    weaknesses: >
+      Code duplication across BFFs; more services to maintain; consistency
+      challenges; potential for drift between BFFs.
+    example_use_case: >
+      A media streaming service with separate BFFs for the web player
+      (full metadata), mobile app (compressed responses), and smart TV
+      (simplified UI data).
+    when_not_to_use: >
+      Avoid for single-client applications, when API consistency is
+      critical, or when the team is too small to maintain multiple BFFs.
+    prerequisites: >
+      Microservices backend, API gateway, and team structure supporting
+      per-client ownership.
+    references: >
+      https://samnewman.io/patterns/architectural/bff/
+    tags:
+      - frontend
+      - bff
+      - api-gateway
+      - mobile
+      - microservices
+
+  # ===== NON-AGENTIC: Deployment Patterns =====
+
+  - name: "Container Orchestration"
+    intent: "Automate deployment, scaling, and management of containerized applications using a cluster orchestrator."
+    structure: >
+      Applications packaged as Docker containers. Orchestrator (Kubernetes,
+      ECS) manages scheduling, scaling, networking, and health checks.
+      Declarative configuration (YAML manifests) defines desired state.
+      Supports rolling updates, canary deployments, and auto-scaling.
+    when_to_use: >
+      Use for production deployments requiring high availability, auto-
+      scaling, and rolling updates. Essential for microservices
+      architectures and cloud-native applications.
+    strengths: >
+      Automated scaling and healing; consistent environments; rolling
+      updates; resource efficiency; infrastructure as code.
+    weaknesses: >
+      Steep learning curve; operational complexity; requires monitoring;
+      resource overhead; debugging in clusters is harder.
+    example_use_case: >
+      Deploying a microservices application to Kubernetes with auto-
+      scaling, health checks, and zero-downtime deployments.
+    when_not_to_use: >
+      Avoid for simple applications, small teams without DevOps capacity,
+      or when serverless is more appropriate.
+    prerequisites: >
+      Container runtime (Docker), orchestrator (Kubernetes), CI/CD pipeline,
+      and monitoring/alerting infrastructure.
+    references: >
+      https://kubernetes.io/docs/concepts/
+    tags:
+      - deployment
+      - docker
+      - kubernetes
+      - containers
+      - cloud
+
+  - name: "CI/CD Pipeline"
+    intent: "Automate the build, test, and deployment process for consistent and reliable software delivery."
+    structure: >
+      Pipeline stages: (1) Source — code commit triggers pipeline; (2)
+      Build — compile, package, create artifacts; (3) Test — unit tests,
+      integration tests, security scans; (4) Deploy — staging, then
+      production with approval gates; (5) Monitor — post-deployment
+      health checks.
+    when_to_use: >
+      Use for any project requiring consistent, repeatable deployments.
+      Essential for teams practicing continuous delivery and DevOps.
+    strengths: >
+      Faster releases; consistent deployments; early bug detection;
+      reduced manual errors; audit trail; developer productivity.
+    weaknesses: >
+      Initial setup complexity; maintenance overhead; flaky tests can
+      block deployments; requires test suite investment.
+    example_use_case: >
+      A CI/CD pipeline that runs tests on every PR, deploys to staging
+      automatically, and promotes to production with approval.
+    when_not_to_use: >
+      Avoid for one-off projects, throwaway prototypes, or when the
+      team is too small to justify pipeline maintenance.
+    prerequisites: >
+      CI/CD platform (GitHub Actions, GitLab CI, Jenkins), test suite,
+      and deployment infrastructure.
+    references: >
+      https://martinfowler.com/bliki/ContinuousDelivery.html
+    tags:
+      - deployment
+      - ci-cd
+      - automation
+      - devops
+      - testing
